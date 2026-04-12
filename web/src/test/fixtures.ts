@@ -1,0 +1,110 @@
+import type { DashboardData } from '../api'
+
+export const mockStats: DashboardData['stats'] = {
+  daily_activity: [
+    { date: '2026-04-10', message_count: 100, session_count: 2, tool_call_count: 30 },
+    { date: '2026-04-11', message_count: 200, session_count: 3, tool_call_count: 60 },
+    { date: '2026-04-12', message_count: 150, session_count: 2, tool_call_count: 45 },
+  ],
+  total_messages: 450,
+  total_sessions: 7,
+  total_tool_calls: 135,
+  active_days: 3,
+  date_range: ['2026-04-10', '2026-04-12'],
+}
+
+export const mockUsage: DashboardData['usage'] = {
+  facets: [
+    {
+      session_id: 'abc',
+      brief_summary: 'Fix auth bug',
+      outcome: 'mostly_achieved',
+      claude_helpfulness: 'very_helpful',
+      session_type: 'bug_fix',
+    },
+    {
+      session_id: 'def',
+      brief_summary: 'Add dashboard feature',
+      outcome: 'fully_achieved',
+      claude_helpfulness: 'very_helpful',
+      session_type: 'feature_development',
+    },
+    {
+      session_id: 'ghi',
+      brief_summary: 'Debug performance',
+      outcome: 'partially_achieved',
+      claude_helpfulness: 'helpful',
+      session_type: 'debugging',
+    },
+  ],
+  total_sessions: 3,
+  outcome_counts: { mostly_achieved: 1, fully_achieved: 1, partially_achieved: 1 },
+  helpfulness_counts: { very_helpful: 2, helpful: 1 },
+}
+
+export const mockProjects: DashboardData['projects'] = [
+  {
+    id: '-Users-alice-myrepo',
+    path: '/Users/alice/myrepo',
+    memory_files: [
+      {
+        name: 'user_role.md',
+        content: '---\nname: User role\ntype: user\n---\nSenior engineer working on dashboard',
+      },
+    ],
+  },
+  {
+    id: '-Users-alice-other',
+    path: '/Users/alice/other',
+    memory_files: [],
+  },
+]
+
+export const mockPlugins: DashboardData['plugins'] = [
+  { id: 'superpowers@claude-plugins-official', enabled: true },
+  { id: 'railway@railway-skills', enabled: true },
+  { id: 'old-plugin@some-registry', enabled: false },
+]
+
+export const mockTodos: DashboardData['todos'] = {
+  sessions: [
+    {
+      id: 'session-abc-123',
+      items: [
+        { content: 'Write tests', status: 'in_progress', activeForm: 'Writing tests' },
+        { content: 'Review PR', status: 'pending', activeForm: 'Reviewing PR' },
+        { content: 'Update docs', status: 'completed', activeForm: 'Updating docs' },
+      ],
+    },
+  ],
+  plans: [
+    { name: 'feature-plan', content: '# Feature Plan\nStep 1: design\nStep 2: implement' },
+  ],
+  pending_count: 1,
+  in_progress_count: 1,
+  completed_count: 1,
+}
+
+export const mockSessions: DashboardData['sessions'] = mockUsage.facets
+
+export const mockSettings: DashboardData['settings'] = {
+  allowed_tools: ['WebSearch', 'Bash(git:*)', 'Edit'],
+  enabled_plugins: ['superpowers@official', 'railway@skills'],
+  disabled_plugins: ['old-plugin@registry'],
+  effort_level: 'high',
+  always_thinking: true,
+  recent_history: [
+    { display: 'cargo test', timestamp: 2000, project: '/Users/alice/repo' },
+    { display: 'git status', timestamp: 1000, project: '/Users/alice/repo' },
+  ],
+}
+
+export const mockDashboard: DashboardData = {
+  stats: mockStats,
+  usage: mockUsage,
+  projects: mockProjects,
+  plugins: mockPlugins,
+  todos: mockTodos,
+  sessions: mockSessions,
+  settings: mockSettings,
+}
