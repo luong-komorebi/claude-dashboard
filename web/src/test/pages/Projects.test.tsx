@@ -24,7 +24,7 @@ describe('Projects page', () => {
     const user = userEvent.setup()
     render(<Projects data={mockProjects} />)
     await user.click(screen.getByText('/Users/alice/myrepo'))
-    expect(screen.getByText(/Senior engineer working on dashboard/)).toBeInTheDocument()
+    expect(screen.getByText('Senior engineer working on dashboard')).toBeInTheDocument()
   })
 
   it('shows no memory files message for empty projects', async () => {
@@ -39,7 +39,7 @@ describe('Projects page', () => {
     render(<Projects data={mockProjects} />)
     await user.click(screen.getByText('/Users/alice/myrepo'))
     await user.click(screen.getByText('/Users/alice/myrepo'))
-    expect(screen.queryByText(/Senior engineer/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Senior engineer working on dashboard')).not.toBeInTheDocument()
   })
 
   it('handles empty projects list', () => {

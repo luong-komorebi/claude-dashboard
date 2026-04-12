@@ -1,0 +1,11 @@
+{
+  "name": "claude-dashboard",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm --filter web build",
+    "test": "pnpm --filter web test",
+    "test:coverage": "pnpm --filter web test:coverage",
+    "preview": "pnpm --filter web preview"
+  }
+}

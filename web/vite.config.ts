@@ -1,16 +1,13 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+// When deploying to GitHub Pages, VITE_BASE_PATH is set to "/<repo-name>/" by the CI workflow.
+// For local dev it defaults to "/" so asset paths stay relative to the root.
+const base = process.env.VITE_BASE_PATH ?? '/'
+
 export default defineConfig({
+  base,
   plugins: [react()],
-  server: {
-    proxy: {
-      '/api': {
-        target: 'http://127.0.0.1:7878',
-        changeOrigin: true,
-      },
-    },
-  },
   test: {
     environment: 'jsdom',
     globals: true,

@@ -35,7 +35,7 @@ describe('Sessions page', () => {
 
   it('shows em dash for missing summary', () => {
     render(<Sessions data={[{ session_id: 'x' }]} />)
-    expect(screen.getByText('—')).toBeInTheDocument()
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0)
   })
 
   it('handles empty sessions array', () => {

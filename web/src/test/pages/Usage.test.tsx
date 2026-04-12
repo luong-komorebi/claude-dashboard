@@ -16,15 +16,15 @@ describe('Usage page', () => {
 
   it('shows outcome distribution labels', () => {
     render(<Usage data={mockUsage} />)
-    expect(screen.getByText('mostly_achieved')).toBeInTheDocument()
-    expect(screen.getByText('fully_achieved')).toBeInTheDocument()
-    expect(screen.getByText('partially_achieved')).toBeInTheDocument()
+    expect(screen.getAllByText('mostly_achieved').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('fully_achieved').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('partially_achieved').length).toBeGreaterThan(0)
   })
 
   it('shows helpfulness labels', () => {
     render(<Usage data={mockUsage} />)
-    expect(screen.getByText('very_helpful')).toBeInTheDocument()
-    expect(screen.getByText('helpful')).toBeInTheDocument()
+    expect(screen.getAllByText('very_helpful').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('helpful').length).toBeGreaterThan(0)
   })
 
   it('renders session summaries in table', () => {

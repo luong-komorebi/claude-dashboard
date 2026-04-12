@@ -49,7 +49,7 @@ export const mockProjects: DashboardData['projects'] = [
     memory_files: [
       {
         name: 'user_role.md',
-        content: '---\nname: User role\ntype: user\n---\nSenior engineer working on dashboard',
+        content: '---\nname: User role\ntype: user\ndescription: Senior engineer working on dashboard\n---\n',
       },
     ],
   },
