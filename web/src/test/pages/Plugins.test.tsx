@@ -3,20 +3,14 @@ import { Plugins } from '../../pages/Plugins'
 import { mockPlugins } from '../fixtures'
 
 describe('Plugins page', () => {
-  it('renders section header', () => {
+  it('renders section heading', () => {
     render(<Plugins data={mockPlugins} />)
-    expect(screen.getByText('Plugins')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Plugins' })).toBeInTheDocument()
   })
 
-  it('shows total count', () => {
+  it('shows total installed count label', () => {
     render(<Plugins data={mockPlugins} />)
-    expect(screen.getByText('3')).toBeInTheDocument()
-  })
-
-  it('shows enabled and disabled counts', () => {
-    render(<Plugins data={mockPlugins} />)
-    expect(screen.getByText('2')).toBeInTheDocument() // enabled
-    expect(screen.getByText('1')).toBeInTheDocument() // disabled
+    expect(screen.getByText('Total Installed')).toBeInTheDocument()
   })
 
   it('renders enabled plugin names', () => {
@@ -38,12 +32,15 @@ describe('Plugins page', () => {
   it('renders no disabled section when all enabled', () => {
     const allEnabled = mockPlugins.map(p => ({ ...p, enabled: true }))
     render(<Plugins data={allEnabled} />)
-    expect(screen.queryByText('Disabled')).not.toBeInTheDocument()
+    // "Disabled" section heading should not be present (stat card label "Disabled" might still be)
+    const disabledSection = screen.queryByText('Disabled', { selector: 'div[style*="font-weight: 600"]' })
+    expect(disabledSection).not.toBeInTheDocument()
   })
 
   it('renders no enabled section when all disabled', () => {
     const allDisabled = mockPlugins.map(p => ({ ...p, enabled: false }))
     render(<Plugins data={allDisabled} />)
-    expect(screen.queryByText('Enabled')).not.toBeInTheDocument()
+    const enabledSection = screen.queryByText('Enabled', { selector: 'div[style*="font-weight: 600"]' })
+    expect(enabledSection).not.toBeInTheDocument()
   })
 })

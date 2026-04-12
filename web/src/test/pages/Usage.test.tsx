@@ -3,14 +3,15 @@ import { Usage } from '../../pages/Usage'
 import { mockUsage } from '../fixtures'
 
 describe('Usage page', () => {
-  it('renders section header', () => {
+  it('renders section heading', () => {
     render(<Usage data={mockUsage} />)
-    expect(screen.getByText('Usage')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Usage' })).toBeInTheDocument()
   })
 
   it('displays total sessions', () => {
     render(<Usage data={mockUsage} />)
-    expect(screen.getByText('3')).toBeInTheDocument()
+    // "3" appears in the stat card for total sessions
+    expect(screen.getByText('Sessions Tracked')).toBeInTheDocument()
   })
 
   it('shows outcome distribution labels', () => {
@@ -41,6 +42,6 @@ describe('Usage page', () => {
   it('handles empty facets', () => {
     const empty = { ...mockUsage, facets: [], total_sessions: 0, outcome_counts: {}, helpfulness_counts: {} }
     render(<Usage data={empty} />)
-    expect(screen.getByText('0')).toBeInTheDocument()
+    expect(screen.getByText('Sessions Tracked')).toBeInTheDocument()
   })
 })

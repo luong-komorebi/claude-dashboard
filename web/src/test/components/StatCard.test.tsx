@@ -26,12 +26,13 @@ describe('StatCard', () => {
   it('applies highlight border when highlight=true', () => {
     const { container } = render(<StatCard label="L" value="V" highlight />)
     const card = container.firstChild as HTMLElement
-    expect(card.style.border).toContain('#7c6af7')
+    // jsdom normalizes hex to rgb
+    expect(card.style.border).toContain('rgb(124, 106, 247)')
   })
 
   it('applies default border when highlight is not set', () => {
     const { container } = render(<StatCard label="L" value="V" />)
     const card = container.firstChild as HTMLElement
-    expect(card.style.border).toContain('#333')
+    expect(card.style.border).toContain('rgb(51, 51, 51)')
   })
 })

@@ -3,9 +3,9 @@ import { Stats } from '../../pages/Stats'
 import { mockStats } from '../fixtures'
 
 describe('Stats page', () => {
-  it('renders section header', () => {
+  it('renders section heading', () => {
     render(<Stats data={mockStats} />)
-    expect(screen.getByText('Stats')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Stats' })).toBeInTheDocument()
   })
 
   it('displays total messages', () => {
@@ -25,25 +25,27 @@ describe('Stats page', () => {
 
   it('shows date range in subtitle', () => {
     render(<Stats data={mockStats} />)
-    expect(screen.getByText(/2026-04-10/)).toBeInTheDocument()
-    expect(screen.getByText(/2026-04-12/)).toBeInTheDocument()
+    expect(screen.getByText(/2026-04-10.*2026-04-12/)).toBeInTheDocument()
   })
 
   it('renders daily activity table rows', () => {
     render(<Stats data={mockStats} />)
-    expect(screen.getAllByText(/2026-04-/)).not.toHaveLength(0)
+    const dates = screen.getAllByText(/2026-04-1/)
+    expect(dates.length).toBeGreaterThan(0)
   })
 
   it('handles empty activity gracefully', () => {
     const empty = { ...mockStats, daily_activity: [], active_days: 0, date_range: null }
     render(<Stats data={empty} />)
-    expect(screen.getByText('Stats')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Stats' })).toBeInTheDocument()
   })
 
   it('does not show subtitle when date_range is null', () => {
     const noRange = { ...mockStats, date_range: null }
-    render(<Stats data={noRange} />)
-    // subtitle only contains "Stats" heading, no date range text
-    expect(screen.queryByText(/–/)).not.toBeInTheDocument()
+    const { container } = render(<Stats data={noRange} />)
+    // SectionHeader renders sub only when provided
+    const subs = container.querySelectorAll('div[style*="color: rgb(102"]')
+    const subTexts = Array.from(subs).map(el => el.textContent)
+    expect(subTexts.every(t => !t?.includes('2026'))).toBe(true)
   })
 })

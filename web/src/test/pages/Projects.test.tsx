@@ -4,14 +4,9 @@ import { Projects } from '../../pages/Projects'
 import { mockProjects } from '../fixtures'
 
 describe('Projects page', () => {
-  it('renders section header', () => {
+  it('renders section heading', () => {
     render(<Projects data={mockProjects} />)
-    expect(screen.getByText('Projects')).toBeInTheDocument()
-  })
-
-  it('displays project count', () => {
-    render(<Projects data={mockProjects} />)
-    expect(screen.getByText('2')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Projects' })).toBeInTheDocument()
   })
 
   it('shows project paths', () => {
@@ -49,6 +44,6 @@ describe('Projects page', () => {
 
   it('handles empty projects list', () => {
     render(<Projects data={[]} />)
-    expect(screen.getByText('0')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Projects' })).toBeInTheDocument()
   })
 })

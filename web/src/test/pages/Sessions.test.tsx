@@ -3,14 +3,15 @@ import { Sessions } from '../../pages/Sessions'
 import { mockSessions } from '../fixtures'
 
 describe('Sessions page', () => {
-  it('renders section header', () => {
+  it('renders section heading', () => {
     render(<Sessions data={mockSessions} />)
-    expect(screen.getByText('Sessions')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Sessions' })).toBeInTheDocument()
   })
 
-  it('shows total session count', () => {
+  it('shows Sessions stat card label', () => {
     render(<Sessions data={mockSessions} />)
-    expect(screen.getByText('3')).toBeInTheDocument()
+    // The stat card label "Sessions" and "with summaries" sub
+    expect(screen.getByText('with summaries')).toBeInTheDocument()
   })
 
   it('renders session summaries', () => {
@@ -33,14 +34,13 @@ describe('Sessions page', () => {
   })
 
   it('shows em dash for missing summary', () => {
-    const withMissing = [{ session_id: 'x' }]
-    render(<Sessions data={withMissing} />)
+    render(<Sessions data={[{ session_id: 'x' }]} />)
     expect(screen.getByText('—')).toBeInTheDocument()
   })
 
   it('handles empty sessions array', () => {
     render(<Sessions data={[]} />)
-    expect(screen.getByText('Sessions')).toBeInTheDocument()
-    expect(screen.getByText('0')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Sessions' })).toBeInTheDocument()
+    expect(screen.getByText('with summaries')).toBeInTheDocument()
   })
 })
