@@ -1,3 +1,25 @@
+# tooling
 .superpowers
-target/
+
+# dependencies
 node_modules/
+web/node_modules/
+
+# build output
+web/dist/
+web/.vite/
+
+# TypeScript incremental build cache
+web/node_modules/.tmp/
+
+# test coverage
+web/coverage/
+
+# env files
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
