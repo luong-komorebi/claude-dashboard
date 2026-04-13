@@ -49,3 +49,9 @@ check: typecheck test build
 # Remove all build artifacts
 clean:
     rm -rf target/ web/dist/ web/src/wasm-pkg/ web/node_modules/.tmp/
+
+# Refresh bundled Anthropic model pricing from LiteLLM's canonical JSON
+pricing-update:
+    curl -sL https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json -o /tmp/litellm_prices.json
+    python3 scripts/filter_pricing.py /tmp/litellm_prices.json web/src/cost/pricing.json
+    @echo "pricing.json updated — commit the change"

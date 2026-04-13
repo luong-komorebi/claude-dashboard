@@ -85,6 +85,21 @@ export interface SettingsData {
   recent_history: HistoryEntry[]
 }
 
+/**
+ * A single assistant-message usage record extracted from a project's
+ * .jsonl session log. One record per assistant turn.
+ */
+export interface UsageEvent {
+  timestamp: string           // ISO-8601 datetime
+  session_id: string          // session UUID (filename stem)
+  project_id: string          // parent directory name (path-encoded)
+  model: string               // e.g. "claude-sonnet-4-6"
+  input_tokens: number
+  output_tokens: number
+  cache_creation_input_tokens: number
+  cache_read_input_tokens: number
+}
+
 export interface DashboardData {
   stats: StatsData
   usage: UsageData
@@ -93,5 +108,6 @@ export interface DashboardData {
   todos: TodosData
   sessions: SessionFacet[]
   settings: SettingsData
+  usage_events: UsageEvent[]
 }
 

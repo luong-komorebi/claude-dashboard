@@ -99,6 +99,39 @@ export const mockSettings: DashboardData['settings'] = {
   ],
 }
 
+export const mockUsageEvents: DashboardData['usage_events'] = [
+  {
+    timestamp: '2026-04-10T10:00:00Z',
+    session_id: 'sess-1',
+    project_id: '-Users-alice-myrepo',
+    model: 'claude-sonnet-4-6',
+    input_tokens: 100,
+    output_tokens: 500,
+    cache_creation_input_tokens: 1000,
+    cache_read_input_tokens: 2000,
+  },
+  {
+    timestamp: '2026-04-10T11:30:00Z',
+    session_id: 'sess-1',
+    project_id: '-Users-alice-myrepo',
+    model: 'claude-sonnet-4-6',
+    input_tokens: 200,
+    output_tokens: 800,
+    cache_creation_input_tokens: 500,
+    cache_read_input_tokens: 3000,
+  },
+  {
+    timestamp: '2026-04-12T09:15:00Z',
+    session_id: 'sess-2',
+    project_id: '-Users-alice-other',
+    model: 'claude-opus-4-6',
+    input_tokens: 50,
+    output_tokens: 300,
+    cache_creation_input_tokens: 2000,
+    cache_read_input_tokens: 0,
+  },
+]
+
 export const mockDashboard: DashboardData = {
   stats: mockStats,
   usage: mockUsage,
@@ -107,4 +140,5 @@ export const mockDashboard: DashboardData = {
   todos: mockTodos,
   sessions: mockSessions,
   settings: mockSettings,
+  usage_events: mockUsageEvents,
 }

@@ -11,7 +11,7 @@
 
 import type {
   DashboardData, StatsData, UsageData, Project, Plugin,
-  TodosData, SessionFacet, SettingsData,
+  TodosData, SessionFacet, SettingsData, UsageEvent,
 } from '../api'
 
 // ─── File-system helpers ──────────────────────────────────────────────────────
@@ -188,6 +188,89 @@ async function parseSessions(dir: FileSystemDirectoryHandle): Promise<SessionFac
   return sessions
 }
 
+/**
+ * Walks projects/<id>/<uuid>.jsonl session logs and extracts one UsageEvent
+ * per assistant message that carries `message.usage`. Line-by-line streaming
+ * via Blob.stream() + TextDecoderStream keeps peak memory low even for very
+ * long histories.
+ */
+async function parseUsageEvents(dir: FileSystemDirectoryHandle): Promise<UsageEvent[]> {
+  const events: UsageEvent[] = []
+
+  for await (const [projectId, projHandle] of await listDir(dir, 'projects')) {
+    if (projHandle.kind !== 'directory') continue
+    const projDir = projHandle as FileSystemDirectoryHandle
+
+    for await (const [name, entry] of projDir.entries()) {
+      if (!name.endsWith('.jsonl') || entry.kind !== 'file') continue
+
+      const sessionId = name.replace('.jsonl', '')
+      const file = await (entry as FileSystemFileHandle).getFile()
+
+      // Stream line-by-line instead of loading the whole file into memory
+      const stream = file.stream().pipeThrough(new TextDecoderStream())
+      let buffer = ''
+
+      for await (const chunk of stream as unknown as AsyncIterable<string>) {
+        buffer += chunk
+        let newline = buffer.indexOf('\n')
+        while (newline !== -1) {
+          const line = buffer.slice(0, newline)
+          buffer = buffer.slice(newline + 1)
+          newline = buffer.indexOf('\n')
+          if (!line) continue
+          try {
+            const ev = extractUsageEvent(line, sessionId, projectId)
+            if (ev) events.push(ev)
+          } catch { /* skip malformed line */ }
+        }
+      }
+      // Final line (no trailing newline)
+      if (buffer) {
+        try {
+          const ev = extractUsageEvent(buffer, sessionId, projectId)
+          if (ev) events.push(ev)
+        } catch { /* skip */ }
+      }
+    }
+  }
+
+  return events
+}
+
+interface JsonlMessage {
+  type?: string
+  timestamp?: string
+  message?: {
+    model?: string
+    usage?: {
+      input_tokens?: number
+      output_tokens?: number
+      cache_creation_input_tokens?: number
+      cache_read_input_tokens?: number
+    }
+  }
+}
+
+function extractUsageEvent(line: string, sessionId: string, projectId: string): UsageEvent | null {
+  const entry = JSON.parse(line) as JsonlMessage
+  if (entry.type !== 'assistant') return null
+  const msg = entry.message
+  const usage = msg?.usage
+  if (!msg || !usage) return null
+
+  return {
+    timestamp: entry.timestamp ?? '',
+    session_id: sessionId,
+    project_id: projectId,
+    model: msg.model ?? 'unknown',
+    input_tokens: usage.input_tokens ?? 0,
+    output_tokens: usage.output_tokens ?? 0,
+    cache_creation_input_tokens: usage.cache_creation_input_tokens ?? 0,
+    cache_read_input_tokens: usage.cache_read_input_tokens ?? 0,
+  }
+}
+
 async function parseSettings(dir: FileSystemDirectoryHandle): Promise<SettingsData> {
   const raw = await readJson<{
     permissions?: { allow?: string[] }
@@ -235,7 +318,7 @@ export type WorkerResponse =
   | { ok: false; error: string }
 
 async function loadAll(dir: FileSystemDirectoryHandle): Promise<DashboardData> {
-  const [stats, usage, projects, plugins, todos, sessions, settings] = await Promise.all([
+  const [stats, usage, projects, plugins, todos, sessions, settings, usage_events] = await Promise.all([
     parseStats(dir),
     parseUsage(dir),
     parseProjects(dir),
@@ -243,8 +326,9 @@ async function loadAll(dir: FileSystemDirectoryHandle): Promise<DashboardData> {
     parseTodos(dir),
     parseSessions(dir),
     parseSettings(dir),
+    parseUsageEvents(dir),
   ])
-  return { stats, usage, projects, plugins, todos, sessions, settings }
+  return { stats, usage, projects, plugins, todos, sessions, settings, usage_events }
 }
 
 self.addEventListener('message', (e: MessageEvent<FileSystemDirectoryHandle>) => {
