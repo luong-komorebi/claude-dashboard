@@ -95,20 +95,3 @@ export interface DashboardData {
   settings: SettingsData
 }
 
-async function get<T>(path: string): Promise<T> {
-  const res = await fetch(path)
-  if (!res.ok) throw new Error(`${path}: ${res.status}`)
-  return res.json()
-}
-
-export const api = {
-  all: () => get<DashboardData>('/api/all'),
-  stats: () => get<StatsData>('/api/stats'),
-  usage: () => get<UsageData>('/api/usage'),
-  projects: () => get<Project[]>('/api/projects'),
-  plugins: () => get<Plugin[]>('/api/plugins'),
-  todos: () => get<TodosData>('/api/todos'),
-  sessions: () => get<SessionFacet[]>('/api/sessions'),
-  settings: () => get<SettingsData>('/api/settings'),
-  refresh: () => fetch('/api/refresh', { method: 'POST' }).then(r => r.json()),
-}

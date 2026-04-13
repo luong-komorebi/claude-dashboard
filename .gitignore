@@ -1,6 +1,9 @@
 # tooling
 .superpowers
 
+# Rust build artifacts
+target/
+
 # dependencies
 node_modules/
 web/node_modules/

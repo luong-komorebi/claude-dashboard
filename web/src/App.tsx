@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { DashboardData } from './api'
-import { loadAll, pickClaudeDir, getStoredDir, clearHandle } from './fs-access'
+import type { WorkerResponse } from './worker/parser.worker'
+import { pickClaudeDir, getStoredDir, clearHandle } from './fs-access'
+import { saveToOpfs, loadFromOpfs, clearOpfsCache } from './opfs'
 import { Stats } from './pages/Stats'
 import { Usage } from './pages/Usage'
 import { Projects } from './pages/Projects'
@@ -8,45 +10,103 @@ import { Plugins } from './pages/Plugins'
 import { Todos } from './pages/Todos'
 import { Sessions } from './pages/Sessions'
 import { Settings } from './pages/Settings'
+import { Trends } from './pages/Trends'
 
-const TABS = ['Stats', 'Usage', 'Projects', 'Plugins', 'Todos', 'Sessions', 'Settings'] as const
+// ─── Tab definitions ──────────────────────────────────────────────────────────
+
+const TABS = ['Stats', 'Trends', 'Usage', 'Sessions', 'Projects', 'Plugins', 'Todos', 'Settings'] as const
 type Tab = typeof TABS[number]
+
+// ─── State machine ───────────────────────────────────────────────────────────
 
 type AppState =
   | { phase: 'checking' }
   | { phase: 'pick' }
   | { phase: 'loading' }
-  | { phase: 'ready'; data: DashboardData; dir: FileSystemDirectoryHandle }
+  | { phase: 'ready'; data: DashboardData; dir: FileSystemDirectoryHandle; stale: boolean; cachedAt?: number }
   | { phase: 'error'; message: string }
+
+// ─── Worker helper ────────────────────────────────────────────────────────────
+
+function parseInWorker(dir: FileSystemDirectoryHandle): Promise<DashboardData> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(
+      new URL('./worker/parser.worker.ts', import.meta.url),
+      { type: 'module' },
+    )
+    worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
+      worker.terminate()
+      if (e.data.ok) resolve(e.data.data)
+      else reject(new Error(e.data.error))
+    }
+    worker.onerror = (e) => { worker.terminate(); reject(new Error(e.message)) }
+    worker.postMessage(dir)
+  })
+}
+
+// ─── View Transition helper ───────────────────────────────────────────────────
+
+function startTransition(cb: () => void) {
+  if ('startViewTransition' in document) {
+    document.startViewTransition(cb)
+  } else {
+    cb()
+  }
+}
+
+// ─── App ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
   const [state, setState] = useState<AppState>({ phase: 'checking' })
   const [tab, setTab] = useState<Tab>('Stats')
   const [refreshing, setRefreshing] = useState(false)
+  const tabIndexRef = useRef(TABS.indexOf('Stats'))
 
-  // On mount: check if we already have a stored permission
+  // ── Startup: check for stored dir, show OPFS cache immediately, re-parse in background
   useEffect(() => {
+    let cancelled = false
+
     getStoredDir().then(async dir => {
-      if (dir) {
+      if (!dir) {
+        setState({ phase: 'pick' })
+        return
+      }
+
+      // Show stale data from OPFS right away (if available)
+      const cached = await loadFromOpfs()
+      if (cached && !cancelled) {
+        setState({ phase: 'ready', data: cached.data, dir, stale: true, cachedAt: cached.cachedAt })
+      } else if (!cancelled) {
         setState({ phase: 'loading' })
-        try {
-          const data = await loadAll(dir)
-          setState({ phase: 'ready', data, dir })
-        } catch (e) {
+      }
+
+      // Re-parse in Worker to get fresh data
+      try {
+        const data = await parseInWorker(dir)
+        if (!cancelled) {
+          await saveToOpfs(data)
+          setState({ phase: 'ready', data, dir, stale: false })
+        }
+      } catch (e) {
+        if (!cancelled && !cached) {
           setState({ phase: 'error', message: String(e) })
         }
-      } else {
-        setState({ phase: 'pick' })
+        // If we already showed stale data, silently keep it
       }
     })
+
+    return () => { cancelled = true }
   }, [])
+
+  // ── Handlers
 
   const grantAccess = async () => {
     try {
       const dir = await pickClaudeDir()
       setState({ phase: 'loading' })
-      const data = await loadAll(dir)
-      setState({ phase: 'ready', data, dir })
+      const data = await parseInWorker(dir)
+      await saveToOpfs(data)
+      setState({ phase: 'ready', data, dir, stale: false })
     } catch (e: unknown) {
       if (e instanceof Error && e.name === 'AbortError') {
         setState({ phase: 'pick' })
@@ -57,11 +117,12 @@ export default function App() {
   }
 
   const refresh = async () => {
-    if (state.phase !== 'ready') return
+    if (state.phase !== 'ready' || refreshing) return
     setRefreshing(true)
     try {
-      const data = await loadAll(state.dir)
-      setState({ phase: 'ready', data, dir: state.dir })
+      const data = await parseInWorker(state.dir)
+      await saveToOpfs(data)
+      setState({ phase: 'ready', data, dir: state.dir, stale: false })
     } catch (e) {
       setState({ phase: 'error', message: String(e) })
     } finally {
@@ -71,8 +132,21 @@ export default function App() {
 
   const reset = async () => {
     await clearHandle()
+    await clearOpfsCache()
     setState({ phase: 'pick' })
   }
+
+  const changeTab = (next: Tab) => {
+    const nextIdx = TABS.indexOf(next)
+    document.documentElement.style.setProperty(
+      '--vt-dir',
+      String(nextIdx >= tabIndexRef.current ? 1 : -1),
+    )
+    tabIndexRef.current = nextIdx
+    startTransition(() => setTab(next))
+  }
+
+  // ── Render: loading / pick / error screens
 
   if (state.phase === 'checking' || state.phase === 'loading') {
     return (
@@ -98,7 +172,6 @@ export default function App() {
             Open ~/.claude folder
           </button>
 
-          {/* Step-by-step guide */}
           <div style={{ marginTop: 32, textAlign: 'left', background: '#111', border: '1px solid #222', borderRadius: 8, padding: 20 }}>
             <div style={{ color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 14 }}>How to navigate to the folder</div>
             {[
@@ -124,10 +197,10 @@ export default function App() {
               </div>
             ))}
             <div style={{ marginTop: 8, padding: '10px 12px', background: '#0d0d0d', borderRadius: 6, borderLeft: '2px solid #333' }}>
-              <span style={{ color: '#555', fontSize: 12 }}>Your folder path is typically: </span>
-              <code style={{ ...code, fontSize: 12 }}>/Users/&lt;your-name&gt;/.claude</code>
+              <span style={{ color: '#555', fontSize: 12 }}>Typically: </span>
+              <code style={{ ...code, fontSize: 12 }}>/Users/&lt;name&gt;/.claude</code>
               <span style={{ color: '#555', fontSize: 12 }}> on macOS, </span>
-              <code style={{ ...code, fontSize: 12 }}>C:\Users\&lt;your-name&gt;\.claude</code>
+              <code style={{ ...code, fontSize: 12 }}>C:\Users\&lt;name&gt;\.claude</code>
               <span style={{ color: '#555', fontSize: 12 }}> on Windows</span>
             </div>
           </div>
@@ -147,7 +220,9 @@ export default function App() {
     )
   }
 
-  const { data } = state
+  // ── Ready: full dashboard
+
+  const { data, stale, cachedAt } = state
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#0d0d0d', color: '#e8e8e8', fontFamily: 'system-ui, sans-serif' }}>
       {/* Sidebar */}
@@ -156,7 +231,7 @@ export default function App() {
           Claude Dashboard
         </div>
         {TABS.map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{
+          <button key={t} onClick={() => changeTab(t)} style={{
             display: 'block', width: '100%', textAlign: 'left',
             padding: '9px 16px', background: tab === t ? '#1e1e1e' : 'transparent',
             color: tab === t ? '#e8e8e8' : '#666', border: 'none',
@@ -168,6 +243,11 @@ export default function App() {
         ))}
 
         <div style={{ position: 'absolute', bottom: 16, left: 0, right: 0, padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {stale && (
+            <div style={{ color: '#555', fontSize: 10, textAlign: 'center', marginBottom: 2 }}>
+              {refreshing ? '↻ Updating…' : cachedAt ? `cached ${new Date(cachedAt).toLocaleTimeString()}` : 'stale'}
+            </div>
+          )}
           <button onClick={refresh} disabled={refreshing} style={{
             background: '#1e1e1e', border: '1px solid #333',
             color: refreshing ? '#555' : '#aaa', borderRadius: 4,
@@ -186,19 +266,22 @@ export default function App() {
         </div>
       </div>
 
-      {/* Main content */}
-      <div style={{ flex: 1, padding: 24, overflow: 'auto' }}>
-        {tab === 'Stats' && <Stats data={data.stats} />}
-        {tab === 'Usage' && <Usage data={data.usage} />}
-        {tab === 'Projects' && <Projects data={data.projects} />}
-        {tab === 'Plugins' && <Plugins data={data.plugins} />}
-        {tab === 'Todos' && <Todos data={data.todos} />}
-        {tab === 'Sessions' && <Sessions data={data.sessions} />}
-        {tab === 'Settings' && <Settings data={data.settings} />}
+      {/* Main content — view-transition-name is set via .tab-content class */}
+      <div className="tab-content" style={{ flex: 1, padding: 24, overflow: 'auto' }}>
+        {tab === 'Stats'     && <Stats     data={data.stats} />}
+        {tab === 'Trends'    && <Trends    data={data.stats} />}
+        {tab === 'Usage'     && <Usage     data={data.usage} />}
+        {tab === 'Sessions'  && <Sessions  data={data.sessions} />}
+        {tab === 'Projects'  && <Projects  data={data.projects} />}
+        {tab === 'Plugins'   && <Plugins   data={data.plugins} />}
+        {tab === 'Todos'     && <Todos     data={data.todos} />}
+        {tab === 'Settings'  && <Settings  data={data.settings} />}
       </div>
     </div>
   )
 }
+
+// ─── Shared styles ────────────────────────────────────────────────────────────
 
 const centered: React.CSSProperties = {
   display: 'flex', alignItems: 'center', justifyContent: 'center',

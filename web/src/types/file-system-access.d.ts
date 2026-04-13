@@ -1,5 +1,5 @@
-// TypeScript 6 DOM lib doesn't yet include the full File System Access API surface.
-// These augmentations cover the methods used in fs-access.ts.
+// TypeScript 6 DOM lib doesn't yet include the full File System Access API surface
+// or the View Transitions API. These augmentations cover what we use.
 
 interface FileSystemHandle {
   queryPermission(descriptor?: { mode?: 'read' | 'readwrite' }): Promise<PermissionState>
@@ -12,4 +12,16 @@ interface Window {
     mode?: 'read' | 'readwrite'
     startIn?: 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos' | FileSystemHandle
   }): Promise<FileSystemDirectoryHandle>
+}
+
+// View Transitions API
+interface ViewTransition {
+  readonly finished: Promise<void>
+  readonly ready: Promise<void>
+  readonly updateCallbackDone: Promise<void>
+  skipTransition(): void
+}
+
+interface Document {
+  startViewTransition(updateCallback?: () => void | Promise<void>): ViewTransition
 }
