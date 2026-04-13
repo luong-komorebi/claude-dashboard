@@ -259,15 +259,32 @@ function extractUsageEvent(line: string, sessionId: string, projectId: string): 
   const usage = msg?.usage
   if (!msg || !usage) return null
 
+  const model = msg.model ?? 'unknown'
+
+  // Skip non-billable internal messages — Claude Code emits these for retries,
+  // interruptions, and system-synthesized turns. They carry `type: assistant`
+  // + a usage block but the model name is wrapped in angle brackets (e.g.
+  // "<synthetic>") and every token count is 0.
+  if (model.startsWith('<')) return null
+
+  const input = usage.input_tokens ?? 0
+  const output = usage.output_tokens ?? 0
+  const cacheCreate = usage.cache_creation_input_tokens ?? 0
+  const cacheRead = usage.cache_read_input_tokens ?? 0
+
+  // Zero-token entries contribute nothing useful to reports — drop them to
+  // keep tables clean and avoid cluttering the unpriced-models warning.
+  if (input + output + cacheCreate + cacheRead === 0) return null
+
   return {
     timestamp: entry.timestamp ?? '',
     session_id: sessionId,
     project_id: projectId,
-    model: msg.model ?? 'unknown',
-    input_tokens: usage.input_tokens ?? 0,
-    output_tokens: usage.output_tokens ?? 0,
-    cache_creation_input_tokens: usage.cache_creation_input_tokens ?? 0,
-    cache_read_input_tokens: usage.cache_read_input_tokens ?? 0,
+    model,
+    input_tokens: input,
+    output_tokens: output,
+    cache_creation_input_tokens: cacheCreate,
+    cache_read_input_tokens: cacheRead,
   }
 }
 

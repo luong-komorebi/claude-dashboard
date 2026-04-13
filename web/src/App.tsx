@@ -5,14 +5,13 @@ import { pickClaudeDir, getStoredDir, clearHandle, ensurePermission } from './fs
 import { saveToOpfs, loadFromOpfs, clearOpfsCache, cleanupLegacyCache } from './opfs'
 import { createSyncChannel, broadcast, withParseLock, type SyncMessage } from './sync'
 import { exportDashboard } from './export'
-import { Stats } from './pages/Stats'
+import { Overview } from './pages/Overview'
 import { Usage } from './pages/Usage'
 import { Projects } from './pages/Projects'
 import { Plugins } from './pages/Plugins'
 import { Todos } from './pages/Todos'
 import { Sessions } from './pages/Sessions'
 import { Settings } from './pages/Settings'
-import { Trends } from './pages/Trends'
 import { ReportsPage } from './pages/Reports'
 import { PrivacyBadge } from './components/PrivacyBadge'
 import { ThemeSwitcher } from './components/ThemeSwitcher'
@@ -20,7 +19,7 @@ import { c } from './theme/colors'
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
 
-const TABS = ['Stats', 'Trends', 'Reports', 'Usage', 'Sessions', 'Projects', 'Plugins', 'Todos', 'Settings'] as const
+const TABS = ['Overview', 'Reports', 'Usage', 'Sessions', 'Projects', 'Plugins', 'Todos', 'Settings'] as const
 type Tab = typeof TABS[number]
 
 // ─── State machine ───────────────────────────────────────────────────────────
@@ -65,10 +64,10 @@ function startTransition(cb: () => void) {
 
 export default function App() {
   const [state, setState] = useState<AppState>({ phase: 'checking' })
-  const [tab, setTab] = useState<Tab>('Stats')
+  const [tab, setTab] = useState<Tab>('Overview')
   const [refreshing, setRefreshing] = useState(false)
   const [exportStatus, setExportStatus] = useState<string | null>(null)
-  const tabIndexRef = useRef(TABS.indexOf('Stats'))
+  const tabIndexRef = useRef(TABS.indexOf('Overview'))
   const channelRef = useRef<BroadcastChannel | null>(null)
 
   // ── Startup: cleanup legacy cache, open sync channel, load data
@@ -432,8 +431,7 @@ export default function App() {
 
       {/* Main content — view-transition-name is set via .tab-content class */}
       <div className="tab-content" style={{ flex: 1, padding: 24, overflow: 'auto' }}>
-        {tab === 'Stats'     && <Stats     data={data.stats} />}
-        {tab === 'Trends'    && <Trends    data={data.stats} />}
+        {tab === 'Overview'  && <Overview  stats={data.stats} events={data.usage_events} onDrillDown={changeTab} />}
         {tab === 'Reports'   && <ReportsPage events={data.usage_events} />}
         {tab === 'Usage'     && <Usage     data={data.usage} />}
         {tab === 'Sessions'  && <Sessions  data={data.sessions} />}
