@@ -3,13 +3,14 @@ import { Settings } from '../../pages/Settings'
 import { mockSettings } from '../fixtures'
 
 describe('Settings page', () => {
-  it('renders section header', () => {
+  it('renders section heading', () => {
     render(<Settings data={mockSettings} />)
-    expect(screen.getByText('Settings')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument()
   })
 
   it('shows allowed tools count', () => {
     render(<Settings data={mockSettings} />)
+    // mockSettings.allowed_tools has 3 entries — appears in StatCard value
     expect(screen.getByText('3')).toBeInTheDocument()
   })
 
@@ -23,17 +24,11 @@ describe('Settings page', () => {
     expect(screen.getByText('on')).toBeInTheDocument()
   })
 
-  it('renders allowed tool names', () => {
+  it('renders allowed tool names as pills', () => {
     render(<Settings data={mockSettings} />)
     expect(screen.getByText('WebSearch')).toBeInTheDocument()
     expect(screen.getByText('Bash(git:*)')).toBeInTheDocument()
     expect(screen.getByText('Edit')).toBeInTheDocument()
-  })
-
-  it('renders enabled plugins', () => {
-    render(<Settings data={mockSettings} />)
-    expect(screen.getByText('superpowers@official')).toBeInTheDocument()
-    expect(screen.getByText('railway@skills')).toBeInTheDocument()
   })
 
   it('renders history entries', () => {
@@ -50,10 +45,5 @@ describe('Settings page', () => {
   it('shows default for missing effort_level', () => {
     render(<Settings data={{ ...mockSettings, effort_level: undefined }} />)
     expect(screen.getByText('default')).toBeInTheDocument()
-  })
-
-  it('hides disabled plugins section when empty', () => {
-    render(<Settings data={{ ...mockSettings, disabled_plugins: [] }} />)
-    expect(screen.queryByText('Disabled Plugins')).not.toBeInTheDocument()
   })
 })

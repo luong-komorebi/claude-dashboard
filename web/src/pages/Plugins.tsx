@@ -18,20 +18,24 @@ export function Plugins({ data }: { data: Plugin[] }) {
     return data.filter(p => matchesQuery(p.id, query))
   }, [data, query])
 
-  const enabled = filtered.filter(p => p.enabled)
-  const disabled = filtered.filter(p => !p.enabled)
+  // Enabled first within the filtered set, alpha within each
+  const sorted = useMemo(
+    () => [...filtered].sort((a, b) => {
+      if (a.enabled !== b.enabled) return a.enabled ? -1 : 1
+      return a.id.localeCompare(b.id)
+    }),
+    [filtered],
+  )
 
-  const allEnabled = data.filter(p => p.enabled)
-  const allDisabled = data.filter(p => !p.enabled)
+  const enabledCount = data.filter(p => p.enabled).length
 
   return (
     <div>
       <SectionHeader title="Plugins" sub="Installed Claude Code plugins and their enabled status" />
 
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
-        <StatCard label="Total Installed" value={data.length} highlight />
-        <StatCard label="Enabled" value={allEnabled.length} sub="active" />
-        <StatCard label="Disabled" value={allDisabled.length} sub="inactive" />
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+        <StatCard label="Installed" value={data.length} highlight />
+        <StatCard label="Enabled" value={enabledCount} sub={`${data.length - enabledCount} disabled`} />
       </div>
 
       <SearchInput
@@ -41,46 +45,47 @@ export function Plugins({ data }: { data: Plugin[] }) {
         count={query ? filtered.length : undefined}
       />
 
-      {query && filtered.length === 0 ? (
-        <div style={{ color: c.textGhost, fontSize: 12, padding: '16px 8px' }}>No results for "{query}"</div>
+      {sorted.length === 0 ? (
+        <div style={{ color: c.textGhost, fontSize: 12, padding: '16px 8px' }}>
+          {query ? `No results for "${query}"` : 'No plugins installed'}
+        </div>
       ) : (
-        <>
-          {enabled.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ color: c.success, fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Enabled</div>
-              <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 6, overflow: 'hidden' }}>
-                {enabled.map(p => {
-                  const [name, registry] = splitId(p.id)
-                  return (
-                    <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderTop: `1px solid ${c.surfaceHover}` }}>
-                      <span style={{ color: c.success, fontSize: 14 }}>✓</span>
-                      <span style={{ color: c.text, fontWeight: 500 }}>{name}</span>
-                      <span style={{ color: c.textGhost, fontSize: 12 }}>@{registry}</span>
-                    </div>
-                  )
-                })}
+        <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 6, overflow: 'hidden' }}>
+          {sorted.map(p => {
+            const [name, registry] = splitId(p.id)
+            return (
+              <div
+                key={p.id}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '8px 14px',
+                  borderTop: `1px solid ${c.borderSoft}`,
+                  opacity: p.enabled ? 1 : 0.5,
+                }}
+              >
+                <span style={{
+                  color: p.enabled ? c.success : c.textGhost,
+                  fontSize: 12, width: 14, textAlign: 'center',
+                }}>
+                  {p.enabled ? '●' : '○'}
+                </span>
+                <span style={{
+                  color: p.enabled ? c.text : c.textMuted,
+                  fontSize: 12, fontFamily: 'monospace', fontWeight: 500,
+                }}>
+                  {name}
+                </span>
+                {registry && (
+                  <span style={{
+                    color: c.textFaint, fontSize: 11, fontFamily: 'monospace',
+                  }}>
+                    @{registry}
+                  </span>
+                )}
               </div>
-            </div>
-          )}
-
-          {disabled.length > 0 && (
-            <div>
-              <div style={{ color: c.textGhost, fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Disabled</div>
-              <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 6, overflow: 'hidden' }}>
-                {disabled.map(p => {
-                  const [name, registry] = splitId(p.id)
-                  return (
-                    <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderTop: `1px solid ${c.surfaceHover}`, opacity: 0.5 }}>
-                      <span style={{ color: c.textGhost, fontSize: 14 }}>✗</span>
-                      <span style={{ color: c.textMuted }}>{name}</span>
-                      <span style={{ color: c.textDisabled, fontSize: 12 }}>@{registry}</span>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-        </>
+            )
+          })}
+        </div>
       )}
     </div>
   )

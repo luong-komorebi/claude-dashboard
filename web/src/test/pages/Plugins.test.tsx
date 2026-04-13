@@ -8,9 +8,9 @@ describe('Plugins page', () => {
     expect(screen.getByRole('heading', { name: 'Plugins' })).toBeInTheDocument()
   })
 
-  it('shows total installed count label', () => {
+  it('shows installed count label', () => {
     render(<Plugins data={mockPlugins} />)
-    expect(screen.getByText('Total Installed')).toBeInTheDocument()
+    expect(screen.getByText('Installed')).toBeInTheDocument()
   })
 
   it('renders enabled plugin names', () => {

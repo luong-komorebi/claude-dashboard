@@ -11,57 +11,63 @@ export function Settings({ data }: { data: SettingsData }) {
   const filteredHistory = useMemo(() => {
     if (!query) return data.recent_history
     return data.recent_history.filter(
-      entry => matchesQuery(entry.display, query) || matchesQuery(entry.project, query)
+      e => matchesQuery(e.display, query) || matchesQuery(e.project, query),
     )
   }, [data.recent_history, query])
 
   return (
     <div>
-      <SectionHeader title="Settings" sub="Permissions, plugins, and recent command history" />
+      <SectionHeader title="Settings" sub="Permissions, effort level, and recent command history" />
 
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
-        <StatCard label="Allowed Tools" value={data.allowed_tools.length} highlight />
-        <StatCard label="Effort Level" value={data.effort_level ?? 'default'} />
+      {/* Compact stat row */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+        <StatCard label="Effort Level" value={data.effort_level ?? 'default'} highlight />
         <StatCard label="Always Thinking" value={data.always_thinking ? 'on' : 'off'} />
-        <StatCard label="History Entries" value={data.recent_history.length} sub="recent commands" />
+        <StatCard label="Allowed Tools" value={data.allowed_tools.length} />
+        <StatCard label="History" value={data.recent_history.length} sub="commands logged" />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
-        <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 6, padding: 16 }}>
-          <div style={{ color: c.accent, fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Allowed Tools / Permissions</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 300, overflow: 'auto' }}>
-            {data.allowed_tools.map((tool, i) => (
-              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ color: c.success, fontSize: 12 }}>✓</span>
-                <span style={{ color: c.textMuted, fontSize: 12, fontFamily: 'monospace' }}>{tool}</span>
-              </div>
+      {/* Allowed tools as compact pills */}
+      {data.allowed_tools.length > 0 && (
+        <div style={{
+          background: c.surface, border: `1px solid ${c.border}`, borderRadius: 6,
+          padding: 14, marginBottom: 16,
+        }}>
+          <div style={{
+            color: c.accent, fontSize: 11, fontWeight: 600, marginBottom: 8,
+            textTransform: 'uppercase', letterSpacing: 0.5,
+          }}>
+            Allowed tools
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {data.allowed_tools.map(tool => (
+              <span key={tool} style={{
+                fontFamily: 'monospace', fontSize: 11,
+                color: c.textMuted, background: c.surfaceHover,
+                padding: '3px 8px', borderRadius: 3,
+                border: `1px solid ${c.borderSoft}`,
+              }}>
+                {tool}
+              </span>
             ))}
           </div>
         </div>
+      )}
 
-        <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 6, padding: 16 }}>
-          <div style={{ color: c.success, fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Enabled Plugins</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 140, overflow: 'auto', marginBottom: 16 }}>
-            {data.enabled_plugins.map(p => (
-              <div key={p} style={{ color: c.textMuted, fontSize: 12, fontFamily: 'monospace' }}>{p}</div>
-            ))}
-          </div>
-          {data.disabled_plugins.length > 0 && (
-            <>
-              <div style={{ color: c.textGhost, fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Disabled Plugins</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 120, overflow: 'auto' }}>
-                {data.disabled_plugins.map(p => (
-                  <div key={p} style={{ color: c.textDisabled, fontSize: 12, fontFamily: 'monospace' }}>{p}</div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
+      {/* Recent history table */}
       <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 6, overflow: 'hidden' }}>
-        <div style={{ padding: '10px 16px', background: c.surfaceAlt, color: c.accent, fontSize: 13, fontWeight: 600 }}>Recent History</div>
-        <div style={{ padding: '12px 16px 0' }}>
+        <div style={{
+          padding: '10px 14px', background: c.surfaceAlt,
+          color: c.accent, fontSize: 11, fontWeight: 600,
+          textTransform: 'uppercase', letterSpacing: 0.5,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <span>Recent commands</span>
+          <span style={{ color: c.textFaint, fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
+            {data.recent_history.length} total
+          </span>
+        </div>
+        <div style={{ padding: '10px 14px 0' }}>
           <SearchInput
             value={query}
             onChange={setQuery}
@@ -70,17 +76,25 @@ export function Settings({ data }: { data: SettingsData }) {
           />
         </div>
         {query && filteredHistory.length === 0 ? (
-          <div style={{ color: c.textGhost, fontSize: 12, padding: '16px 8px' }}>No results for "{query}"</div>
+          <div style={{ color: c.textGhost, fontSize: 12, padding: '0 14px 14px' }}>
+            No results for "{query}"
+          </div>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <tbody>
               {filteredHistory.map((entry, i) => (
-                <tr key={i} style={{ borderTop: `1px solid ${c.surfaceHover}` }}>
-                  <td style={{ padding: '7px 16px', color: c.text, fontFamily: 'monospace', maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <tr key={i} style={{ borderTop: `1px solid ${c.borderSoft}` }}>
+                  <td style={{
+                    padding: '6px 14px', color: c.text, fontFamily: 'monospace',
+                    maxWidth: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
                     {entry.display}
                   </td>
-                  <td style={{ padding: '7px 16px', color: c.textGhost, fontSize: 12 }}>
-                    {entry.project?.split('/').pop()}
+                  <td style={{
+                    padding: '6px 14px', color: c.textGhost, fontSize: 11,
+                    textAlign: 'right', whiteSpace: 'nowrap',
+                  }}>
+                    {entry.project?.split('/').pop() ?? ''}
                   </td>
                 </tr>
               ))}
