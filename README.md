@@ -57,7 +57,16 @@ The binary:
 
 Why `http://localhost` instead of `file://`? The File System Access API requires a secure context — `localhost` qualifies everywhere, `file://` has spotty support.
 
-> **Cutting a new release:** push a `v*` tag (`git tag v0.2.0 && git push --tags`) and the `Release Standalone Binaries` workflow builds all 4 platforms in parallel and publishes them. Run the workflow manually (`Actions` → *Release Standalone Binaries* → *Run workflow*) to produce a draft release you can inspect before publishing.
+### Cutting a new release
+
+Fully automated via [release-please](https://github.com/googleapis/release-please):
+
+1. Commit to `main` using [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `perf:`, etc.)
+2. The `Release Please` workflow opens (or updates) a **Release PR** with a generated `CHANGELOG.md` and synchronized version bumps across `server/Cargo.toml`, `wasm/Cargo.toml`, and `web/package.json`
+3. Merge the Release PR — release-please tags `v0.x.y` and creates a GitHub release
+4. The `v*` tag triggers `Release Standalone Binaries`, which cross-compiles and attaches 4 platform binaries to the release
+
+No manual tagging, no manual changelog, no manual version bumps. Just merge the PR.
 
 ## Development
 

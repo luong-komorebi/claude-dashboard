@@ -1,0 +1,48 @@
+name: Release Please
+
+# Watches `main` for Conventional Commits (feat, fix, perf, refactor, docs, …).
+# When a release is warranted, opens a "Release PR" that bumps versions in
+# Cargo.toml / package.json and regenerates CHANGELOG.md. Merging that PR
+# creates the `v0.x.y` tag, which triggers `release.yml` and builds the
+# cross-platform binaries.
+#
+# Docs: https://github.com/googleapis/release-please
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      # Surface the result in the job summary so you can see at a glance
+      # whether a release was created.
+      - name: Summarize result
+        if: always()
+        run: |
+          {
+            echo "# Release Please"
+            if [ "${{ steps.release.outputs.release_created }}" = "true" ]; then
+              echo "✅ **Released \`${{ steps.release.outputs.tag_name }}\`**"
+              echo ""
+              echo "Tag pushed — \`Release Standalone Binaries\` workflow should start shortly."
+            elif [ "${{ steps.release.outputs.pr }}" != "" ]; then
+              echo "📝 Release PR updated: ${{ steps.release.outputs.pr }}"
+              echo ""
+              echo "Merge the PR to cut the next release."
+            else
+              echo "No release-worthy commits since the last tag."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
