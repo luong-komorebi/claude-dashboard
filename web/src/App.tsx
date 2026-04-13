@@ -4,6 +4,11 @@ import type { WorkerResponse } from './worker/parser.worker'
 import { pickClaudeDir, getStoredDir, clearHandle, ensurePermission } from './fs-access'
 import type { StoredHandles } from './fs-access'
 import type { WorkerRequest } from './worker/parser.worker'
+import {
+  getStoredAccountFile,
+  pickAccountFile as pickAccountFileHandle,
+  wipeAllPersistedState,
+} from './fs-access'
 import { saveToOpfs, loadFromOpfs, clearOpfsCache, cleanupLegacyCache } from './opfs'
 import { isStoragePersisted, requestPersistence } from './persistence'
 import { useInstallPrompt, useOnlineStatus, useIsStandalone } from './pwa'
@@ -36,7 +41,18 @@ type AppState =
 
 // ─── Worker helper ────────────────────────────────────────────────────────────
 
-function parseInWorker(handles: StoredHandles): Promise<DashboardData> {
+async function parseInWorker(handles: StoredHandles): Promise<DashboardData> {
+  // Pick up the user-granted account file handle if one has been stored
+  // and is still readable. We don't fail the whole parse if it isn't —
+  // the account card will just fall back to the "unavailable" state.
+  let accountFile: FileSystemFileHandle | null = null
+  try {
+    const stored = await getStoredAccountFile()
+    if (stored && stored.permission === 'granted') {
+      accountFile = stored.handle
+    }
+  } catch { /* ignore — account info is optional */ }
+
   return new Promise((resolve, reject) => {
     const worker = new Worker(
       new URL('./worker/parser.worker.ts', import.meta.url),
@@ -52,6 +68,7 @@ function parseInWorker(handles: StoredHandles): Promise<DashboardData> {
       configDir: handles.configDir,
       parentDir: handles.parentDir,
       configDirName: handles.configDirName,
+      accountFile,
     }
     worker.postMessage(req)
   })
@@ -262,6 +279,33 @@ export default function App() {
     } catch (e) {
       setState({ phase: 'error', message: String(e) })
     }
+  }
+
+  // Let the user hand-pick ~/.claude.json when they can't grant home access.
+  // Non-async on purpose — showOpenFilePicker must be called synchronously
+  // from the click handler to preserve the user-activation token.
+  const pickAccountFile = () => {
+    pickAccountFileHandle()
+      .then(() => {
+        // Re-run the worker so the account info flows through
+        if (state.phase === 'ready') void refresh()
+      })
+      .catch((e: unknown) => {
+        if (e instanceof Error && e.name !== 'AbortError') {
+          setState({ phase: 'error', message: String(e) })
+        }
+      })
+  }
+
+  // Full-reset button on the reconnect / pick screens. Wipes EVERYTHING:
+  // config handle, account file handle, OPFS cache, localStorage (theme,
+  // budget, persisted settings). The next visit is a clean first-run.
+  const wipeData = async () => {
+    await wipeAllPersistedState()
+    await clearOpfsCache()
+    if (navigator.clearAppBadge) void navigator.clearAppBadge()
+    if (channelRef.current) broadcast(channelRef.current, { type: 'cleared' })
+    setState({ phase: 'pick' })
   }
 
   const reset = async () => {
@@ -560,7 +604,7 @@ export default function App() {
         {tab === 'Analytics' && <Analytics stats={data.stats} events={data.usage_events} />}
         {tab === 'Projects'  && <Projects  data={data.projects} />}
         {tab === 'Activity'  && <Activity  data={data} />}
-        {tab === 'Config'    && <Config    data={data} />}
+        {tab === 'Config'    && <Config    data={data} onPickAccountFile={pickAccountFile} />}
       </div>
 
       <SupportButton />

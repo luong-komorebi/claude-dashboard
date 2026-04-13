@@ -22,6 +22,8 @@ const DB_NAME = 'claude-dashboard'
 const DB_STORE = 'handles'
 /** Bumped from `claude-dir` to force a re-pick when upgrading to dual-handle. */
 const HANDLE_KEY = 'claude-config-v2'
+/** Separate IndexedDB slot for the optional hand-picked `.claude.json` file. */
+const ACCOUNT_FILE_KEY = 'claude-account-file-v1'
 
 interface StoredHandles {
   configDir: FileSystemDirectoryHandle
@@ -56,6 +58,26 @@ async function loadHandles(): Promise<StoredHandles | null> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(DB_STORE, 'readonly')
     const req = tx.objectStore(DB_STORE).get(HANDLE_KEY)
+    req.onsuccess = () => resolve(req.result ?? null)
+    req.onerror = () => reject(req.error)
+  })
+}
+
+async function saveAccountFile(handle: FileSystemFileHandle): Promise<void> {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, 'readwrite')
+    tx.objectStore(DB_STORE).put(handle, ACCOUNT_FILE_KEY)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+async function loadAccountFileHandle(): Promise<FileSystemFileHandle | null> {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, 'readonly')
+    const req = tx.objectStore(DB_STORE).get(ACCOUNT_FILE_KEY)
     req.onsuccess = () => resolve(req.result ?? null)
     req.onerror = () => reject(req.error)
   })
@@ -138,7 +160,7 @@ export async function ensurePermission(handles: StoredHandles): Promise<boolean>
   }
 }
 
-/** Forget the stored handles (used by "Change folder"). */
+/** Forget the stored config handles (used by "Change folder"). */
 export async function clearHandle(): Promise<void> {
   const db = await openDb()
   return new Promise((resolve, reject) => {
@@ -147,6 +169,83 @@ export async function clearHandle(): Promise<void> {
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)
   })
+}
+
+/** Forget the stored account file handle. */
+export async function clearAccountFile(): Promise<void> {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, 'readwrite')
+    tx.objectStore(DB_STORE).delete(ACCOUNT_FILE_KEY)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+/**
+ * Returns the stored account file handle (if any) with its current permission.
+ * The user may have revoked access or the handle may have expired — callers
+ * must check `permission` before passing to the worker.
+ */
+export async function getStoredAccountFile(): Promise<{ handle: FileSystemFileHandle; permission: PermissionState } | null> {
+  const handle = await loadAccountFileHandle()
+  if (!handle) return null
+  const permission = await handle.queryPermission({ mode: 'read' })
+  return { handle, permission }
+}
+
+/**
+ * Open the file picker for the user to manually select `~/.claude.json`.
+ *
+ * Using `showOpenFilePicker` instead of `showDirectoryPicker` because the
+ * home folder contains SSH keys, AWS credentials, and other sensitive system
+ * files — browsers warn aggressively when users try to grant directory access
+ * to it. A single-file pick is much more constrained: the user can see
+ * exactly which file they're granting access to, and no surrounding files
+ * become readable.
+ *
+ * NOT async for the same reason as `pickClaudeDir` — the picker must be
+ * called synchronously from the click handler to preserve the user gesture.
+ */
+export function pickAccountFile(): Promise<FileSystemFileHandle> {
+  return window
+    .showOpenFilePicker({
+      id: 'claude-account-file',
+      multiple: false,
+      types: [
+        {
+          description: 'Claude Code config',
+          accept: { 'application/json': ['.json'] },
+        },
+      ],
+    })
+    .then(async (handles) => {
+      const handle = handles[0]
+      if (!handle) throw new Error('No file selected')
+      await saveAccountFile(handle)
+      return handle
+    })
+}
+
+/**
+ * Nuclear reset — wipes EVERY piece of persisted state so the app returns
+ * to a clean "first visit" experience. Used by the "Clear web data" button.
+ *
+ * Clears:
+ *   - IndexedDB config + account file handles
+ *   - OPFS cached dashboard data (handled by caller — clearOpfsCache)
+ *   - localStorage (theme, budget, etc.)
+ *   - Persistent-storage grant is NOT revoked (browsers don't expose this)
+ */
+export async function wipeAllPersistedState(): Promise<void> {
+  // Clear IndexedDB handles
+  await clearHandle()
+  await clearAccountFile()
+  // Wipe localStorage — theme, budget, etc.
+  try {
+    localStorage.clear()
+  } catch { /* private mode */ }
+  // OPFS is cleared by the caller via clearOpfsCache()
 }
 
 /**

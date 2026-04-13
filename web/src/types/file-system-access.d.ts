@@ -11,6 +11,11 @@ interface SaveFilePickerAcceptType {
   accept: Record<string, string | string[]>
 }
 
+interface OpenFilePickerAcceptType {
+  description?: string
+  accept: Record<string, string | string[]>
+}
+
 interface Window {
   showDirectoryPicker(options?: {
     id?: string
@@ -24,6 +29,14 @@ interface Window {
     excludeAcceptAllOption?: boolean
     startIn?: 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos' | FileSystemHandle
   }): Promise<FileSystemFileHandle>
+
+  showOpenFilePicker(options?: {
+    id?: string
+    multiple?: boolean
+    excludeAcceptAllOption?: boolean
+    types?: OpenFilePickerAcceptType[]
+    startIn?: 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos' | FileSystemHandle
+  }): Promise<FileSystemFileHandle[]>
 }
 
 // Badging API — lets installed PWAs show a count badge on their app icon.

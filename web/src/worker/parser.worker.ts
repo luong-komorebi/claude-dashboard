@@ -357,6 +357,12 @@ export interface WorkerRequest {
   configDir: FileSystemDirectoryHandle
   parentDir: FileSystemDirectoryHandle | null
   configDirName: string
+  /**
+   * Optional user-picked `.claude.json` file — used when the user couldn't
+   * (or didn't want to) grant access to their home folder. Tried as a fallback
+   * if reading from `parentDir` fails or returns nothing.
+   */
+  accountFile: FileSystemFileHandle | null
 }
 
 export type WorkerResponse =
@@ -377,25 +383,36 @@ export type WorkerResponse =
 async function parseAccountInfo(
   parentDir: FileSystemDirectoryHandle | null,
   configDirName: string,
+  accountFile: FileSystemFileHandle | null,
 ): Promise<AccountInfo | null> {
-  if (!parentDir) return null
+  // Source 1: user picked their home folder, so we can read the sibling JSON.
+  if (parentDir) {
+    const candidates = [
+      `${configDirName}.json`, // e.g. `.claude.json`, `.claude-work.json`
+      '.claude.json',          // legacy default fallback
+    ]
+    for (const filename of candidates) {
+      try {
+        const fh = await parentDir.getFileHandle(filename)
+        const file = await fh.getFile()
+        const raw = JSON.parse(await file.text()) as Record<string, unknown>
+        return redactAndBuildAccountInfo(raw, filename)
+      } catch {
+        // File missing or unreadable — try next candidate
+      }
+    }
+  }
 
-  // Candidates in order of preference:
-  //   1. `<configDirName>.json` — e.g. `.claude.json`, `.claude-work.json`
-  //   2. `.claude.json` — legacy default, in case the dir was renamed
-  const candidates = [
-    `${configDirName}.json`,
-    '.claude.json',
-  ]
-
-  for (const filename of candidates) {
+  // Source 2: user hand-picked the account file via showOpenFilePicker.
+  // Chrome blocks picking the home folder directly, so this is the only
+  // way for most users to get account info without the directory-access warning.
+  if (accountFile) {
     try {
-      const fh = await parentDir.getFileHandle(filename)
-      const file = await fh.getFile()
+      const file = await accountFile.getFile()
       const raw = JSON.parse(await file.text()) as Record<string, unknown>
-      return redactAndBuildAccountInfo(raw, filename)
+      return redactAndBuildAccountInfo(raw, accountFile.name)
     } catch {
-      // File missing or unreadable — try next candidate
+      // File gone, permission revoked, or malformed — fall through
     }
   }
 
@@ -464,7 +481,7 @@ async function loadAll(req: WorkerRequest): Promise<DashboardData> {
     parseSessions(dir),
     parseSettings(dir),
     parseUsageEvents(dir),
-    parseAccountInfo(req.parentDir, req.configDirName),
+    parseAccountInfo(req.parentDir, req.configDirName, req.accountFile),
   ])
 
   const { events: usage_events, projectPaths } = eventsResult
