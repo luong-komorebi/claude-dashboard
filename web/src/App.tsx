@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import type { DashboardData } from './api'
 import type { WorkerResponse } from './worker/parser.worker'
+import { useHashRoute } from './hashRoute'
 import { pickClaudeDir, getStoredDir, clearHandle, ensurePermission } from './fs-access'
 import type { StoredHandles } from './fs-access'
 import type { WorkerRequest } from './worker/parser.worker'
@@ -73,24 +74,17 @@ async function parseInWorker(handles: StoredHandles): Promise<DashboardData> {
   })
 }
 
-// ─── View Transition helper ───────────────────────────────────────────────────
-
-function startTransition(cb: () => void) {
-  if ('startViewTransition' in document) {
-    document.startViewTransition(cb)
-  } else {
-    cb()
-  }
-}
-
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
   const [state, setState] = useState<AppState>({ phase: 'checking' })
-  const [tab, setTab] = useState<Tab>('Overview')
+  // Hash routing: `#Overview`, `#Analytics/Forecast`, `#Config/Account`, …
+  // The hook handles view transitions + back/forward history automatically.
+  const [route, navigate] = useHashRoute<Tab>(TABS, 'Overview')
+  const tab = route.tab
+  const sub = route.sub
   const [refreshing, setRefreshing] = useState(false)
   const [onlineRefetchKey, setOnlineRefetchKey] = useState(0)
-  const tabIndexRef = useRef(TABS.indexOf('Overview'))
   const channelRef = useRef<BroadcastChannel | null>(null)
 
   const { canInstall, install } = useInstallPrompt()
@@ -315,14 +309,14 @@ export default function App() {
     setState({ phase: 'pick' })
   }
 
-  const changeTab = (next: Tab) => {
-    const nextIdx = TABS.indexOf(next)
-    document.documentElement.style.setProperty(
-      '--vt-dir',
-      String(nextIdx >= tabIndexRef.current ? 1 : -1),
-    )
-    tabIndexRef.current = nextIdx
-    startTransition(() => setTab(next))
+  // Navigate to a top-level tab (optionally deep-linking to a sub-tab).
+  // Delegates to useHashRoute which handles history pushes + view transitions.
+  const changeTab = (next: Tab, nextSub?: string) => {
+    navigate({ tab: next, sub: nextSub })
+  }
+  // Navigate the sub-tab within the current tab (keeps the top-level tab stable).
+  const changeSub = (nextSub: string) => {
+    navigate({ tab, sub: nextSub })
   }
 
   // ── Render: loading / pick / error screens
@@ -613,10 +607,10 @@ export default function App() {
       {/* Main content — view-transition-name is set via .tab-content class */}
       <div className="tab-content" style={{ flex: 1, padding: 24, overflow: 'auto' }}>
         {tab === 'Overview'  && <Overview  stats={data.stats} events={data.usage_events} projectPaths={data.project_paths} account={data.account} changelog={data.changelog} liveSessions={data.liveSessions} onlineRefetchKey={onlineRefetchKey} onDrillDown={changeTab} onPickAccountFile={pickAccountFile} />}
-        {tab === 'Analytics' && <Analytics stats={data.stats} events={data.usage_events} />}
+        {tab === 'Analytics' && <Analytics stats={data.stats} events={data.usage_events} sub={sub} onSubChange={changeSub} />}
         {tab === 'Projects'  && <Projects  data={data.projects} />}
-        {tab === 'Activity'  && <Activity  data={data} />}
-        {tab === 'Config'    && <Config    data={data} onPickAccountFile={pickAccountFile} onOnlineModeChange={() => setOnlineRefetchKey(k => k + 1)} />}
+        {tab === 'Activity'  && <Activity  data={data} sub={sub} onSubChange={changeSub} />}
+        {tab === 'Config'    && <Config    data={data} sub={sub} onSubChange={changeSub} onPickAccountFile={pickAccountFile} onOnlineModeChange={() => setOnlineRefetchKey(k => k + 1)} />}
       </div>
 
       <SupportButton />

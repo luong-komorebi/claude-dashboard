@@ -57,7 +57,7 @@ interface Props {
   liveSessions: LiveSession[]
   /** Bumped whenever online-mode settings change — triggers LiveUsageCard refetch. */
   onlineRefetchKey: number
-  onDrillDown: (target: 'Analytics' | 'Projects' | 'Activity' | 'Config') => void
+  onDrillDown: (target: 'Analytics' | 'Projects' | 'Activity' | 'Config', sub?: string) => void
   /** Callback to trigger the file picker for the account JSON. */
   onPickAccountFile: () => void
 }
@@ -272,13 +272,13 @@ export function Overview({ stats, events, projectPaths, account, changelog, live
         events={windowedEvents}
         projectPaths={projectPaths}
         onPickAccountFile={onPickAccountFile}
-        onDrillDown={() => onDrillDown('Config')}
+        onDrillDown={() => onDrillDown('Config', 'Account')}
       />
 
       {/* ── Live org usage (only when online mode is enabled) ──────────── */}
       <LiveUsageCard
         refetchKey={onlineRefetchKey}
-        onOpenSettings={() => onDrillDown('Config')}
+        onOpenSettings={() => onDrillDown('Config', 'Settings')}
       />
 
       {/* ── Live sessions + What's new (conditional) ──────────────────────── */}
@@ -334,9 +334,9 @@ export function Overview({ stats, events, projectPaths, account, changelog, live
         <ForecastPreview
           stats={stats}
           forecast={forecast}
-          onMore={() => onDrillDown('Analytics')}
+          onMore={() => onDrillDown('Analytics', 'Forecast')}
         />
-        <MiniHeatmap events={events} onMore={() => onDrillDown('Analytics')} />
+        <MiniHeatmap events={events} onMore={() => onDrillDown('Analytics', 'Heatmap')} />
       </div>
 
       {/* ── Spend breakdowns ─────────────────────────────────────────────── */}
@@ -347,21 +347,31 @@ export function Overview({ stats, events, projectPaths, account, changelog, live
 
       {/* ── Activity details ─────────────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
-        <RecentSessions rows={recentSessions} onMore={() => onDrillDown('Analytics')} />
+        <RecentSessions rows={recentSessions} onMore={() => onDrillDown('Activity', 'Sessions')} />
         <HourActivity buckets={hourActivity} />
       </div>
 
-      {/* ── Drill-down cards ─────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+      {/* ── Drill-down cards — deep-link into specific sub-views ─────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
         <DrillCard
-          label="Forecasts & Insights"
-          description="Holt-Winters forecast, anomaly detection, heatmap, what-if simulator"
-          onClick={() => onDrillDown('Analytics')}
+          label="🔮 Forecast"
+          description="Holt-Winters forecast + anomaly detection with budget tracker"
+          onClick={() => onDrillDown('Analytics', 'Forecast')}
         />
         <DrillCard
-          label="Detailed Reports"
-          description="Daily, Weekly, Monthly, Sessions, and 5-hour Blocks"
-          onClick={() => onDrillDown('Analytics')}
+          label="📊 Detailed Reports"
+          description="Daily / Weekly / Monthly / Sessions / 5-hour Blocks"
+          onClick={() => onDrillDown('Analytics', 'Reports')}
+        />
+        <DrillCard
+          label="📅 Heatmap"
+          description="Year-calendar activity with cost/tokens/messages toggle"
+          onClick={() => onDrillDown('Analytics', 'Heatmap')}
+        />
+        <DrillCard
+          label="🧪 What-If"
+          description="Simulate cost under different model mixes"
+          onClick={() => onDrillDown('Analytics', 'What-If')}
         />
       </div>
     </div>
