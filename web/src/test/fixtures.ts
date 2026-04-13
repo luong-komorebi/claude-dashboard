@@ -141,4 +141,8 @@ export const mockDashboard: DashboardData = {
   sessions: mockSessions,
   settings: mockSettings,
   usage_events: mockUsageEvents,
+  project_paths: {
+    '-Users-alice-myrepo': '/Users/alice/myrepo',
+    '-Users-alice-other': '/Users/alice/other',
+  },
 }

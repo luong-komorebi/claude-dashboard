@@ -357,7 +357,7 @@ export type WorkerResponse =
   | { ok: false; error: string }
 
 async function loadAll(dir: FileSystemDirectoryHandle): Promise<DashboardData> {
-  const [stats, usage, projects, plugins, todos, sessions, settings, usage_events] = await Promise.all([
+  const [stats, usage, projects, plugins, todos, sessions, settings, eventsResult] = await Promise.all([
     parseStats(dir),
     parseUsage(dir),
     parseProjects(dir),
@@ -367,7 +367,22 @@ async function loadAll(dir: FileSystemDirectoryHandle): Promise<DashboardData> {
     parseSettings(dir),
     parseUsageEvents(dir),
   ])
-  return { stats, usage, projects, plugins, todos, sessions, settings, usage_events }
+
+  const { events: usage_events, projectPaths } = eventsResult
+  const project_paths: Record<string, string> = Object.fromEntries(projectPaths.entries())
+
+  // Overwrite each Project's guessed `path` with the real cwd when available.
+  // The naive dash-splitting in parseProjects is only a fallback for projects
+  // that have no associated JSONL events yet.
+  for (const p of projects) {
+    const real = project_paths[p.id]
+    if (real) p.path = real
+  }
+
+  // Re-sort alphabetically by the (now-accurate) path
+  projects.sort((a, b) => a.path.localeCompare(b.path))
+
+  return { stats, usage, projects, plugins, todos, sessions, settings, usage_events, project_paths }
 }
 
 self.addEventListener('message', (e: MessageEvent<FileSystemDirectoryHandle>) => {

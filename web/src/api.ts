@@ -109,5 +109,19 @@ export interface DashboardData {
   sessions: SessionFacet[]
   settings: SettingsData
   usage_events: UsageEvent[]
+  /**
+   * Map from Claude Code's encoded project ID → real filesystem path,
+   * extracted from the `cwd` field embedded in JSONL session events.
+   *
+   * Claude Code encodes `/` as `-` in project directory names, which is
+   * lossy — a folder literally named `oxy-hq` and a path segment boundary
+   * look identical after encoding. The JSONL `cwd` field is the only
+   * reliable way to recover the original path.
+   *
+   * If we couldn't find a matching event (e.g. a project dir with no
+   * JSONL files), the entry will be absent and callers should fall back
+   * to naive dash-splitting.
+   */
+  project_paths: Record<string, string>
 }
 

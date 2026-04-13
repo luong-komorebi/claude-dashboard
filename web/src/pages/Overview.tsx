@@ -48,12 +48,45 @@ interface TrendMetrics {
 interface Props {
   stats: StatsData
   events: UsageEvent[]
+  /** Map from Claude Code's encoded project id → real filesystem path. */
+  projectPaths: Record<string, string>
   onDrillDown: (target: 'Analytics' | 'Projects' | 'Activity' | 'Config') => void
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function Overview({ stats, events, onDrillDown }: Props) {
+// ─── Time window ──────────────────────────────────────────────────────────────
+
+const WINDOWS = ['7d', '30d', '90d', 'all'] as const
+type Window = typeof WINDOWS[number]
+
+function windowDays(w: Window): number | null {
+  switch (w) {
+    case '7d':  return 7
+    case '30d': return 30
+    case '90d': return 90
+    case 'all': return null
+  }
+}
+
+function filterByWindow<T extends { timestamp: string } | { date: string }>(
+  items: T[],
+  w: Window,
+): T[] {
+  const days = windowDays(w)
+  if (days === null) return items
+  const cutoff = new Date()
+  cutoff.setHours(0, 0, 0, 0)
+  cutoff.setDate(cutoff.getDate() - days + 1)
+  const cutoffIso = cutoff.toISOString().slice(0, 10)
+  return items.filter(item => {
+    const iso = 'timestamp' in item ? item.timestamp.slice(0, 10) : item.date
+    return iso >= cutoffIso
+  })
+}
+
+export function Overview({ stats, events, projectPaths, onDrillDown }: Props) {
+  const [window, setWindow] = useState<Window>('30d')
   const [reports, setReports] = useState<Reports | null>(null)
   const [trends, setTrends] = useState<TrendMetrics | null>(null)
   const [insights, setInsights] = useState<Insight[]>([])
@@ -63,26 +96,45 @@ export function Overview({ stats, events, onDrillDown }: Props) {
 
   const pricing = useMemo(() => pricingJson as PricingTable, [])
 
+  // Filtered inputs for all downstream computations
+  const windowedEvents = useMemo(() => filterByWindow(events, window), [events, window])
+  const windowedDaily = useMemo(
+    () => filterByWindow(stats.daily_activity, window),
+    [stats.daily_activity, window],
+  )
+  const windowedStats: StatsData = useMemo(() => ({
+    ...stats,
+    daily_activity: windowedDaily,
+    total_messages: windowedDaily.reduce((s, d) => s + d.message_count, 0),
+    total_sessions: windowedDaily.reduce((s, d) => s + d.session_count, 0),
+    total_tool_calls: windowedDaily.reduce((s, d) => s + d.tool_call_count, 0),
+    active_days: windowedDaily.filter(d => d.message_count > 0).length,
+    date_range: windowedDaily.length > 0
+      ? [windowedDaily[0].date, windowedDaily[windowedDaily.length - 1].date]
+      : null,
+  }), [stats, windowedDaily])
+
   useEffect(() => {
     setLoading(true)
     setError(null)
     getWasm()
       .then(wasm => {
-        // Reports — full aggregation
+        // Reports — windowed aggregation
         const reportsRaw = wasm.compute_reports(JSON.stringify({
-          events, pricing, now_epoch_secs: Math.floor(Date.now() / 1000),
+          events: windowedEvents, pricing, now_epoch_secs: Math.floor(Date.now() / 1000),
         }))
         if (reportsRaw.startsWith('error:')) throw new Error(reportsRaw.slice(6))
 
-        // Trends — streak + moving averages
-        const trendsRaw = wasm.compute_trends(JSON.stringify(stats.daily_activity))
+        // Trends — streak + moving averages over the windowed series
+        const trendsRaw = wasm.compute_trends(JSON.stringify(windowedDaily))
         if (trendsRaw.startsWith('error:')) throw new Error(trendsRaw.slice(6))
 
-        // Insights — rule-based observations
-        const insightsRaw = wasm.compute_insights(JSON.stringify({ events, pricing }))
+        // Insights — rule-based observations on windowed events
+        const insightsRaw = wasm.compute_insights(JSON.stringify({ events: windowedEvents, pricing }))
         if (insightsRaw.startsWith('error:')) throw new Error(insightsRaw.slice(6))
 
-        // Forecast — Holt-Winters on daily message counts (14-day horizon for preview)
+        // Forecast — always uses the full series since Holt-Winters needs >= 2 seasons
+        // of history to be meaningful; window only affects what we display.
         const forecastRaw = wasm.compute_forecast(JSON.stringify({
           daily: stats.daily_activity.map(d => d.message_count),
           horizon: 14,
@@ -97,7 +149,7 @@ export function Overview({ stats, events, onDrillDown }: Props) {
       })
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false))
-  }, [stats, events, pricing])
+  }, [stats, windowedEvents, windowedDaily, pricing])
 
   if (loading) return <Loading />
   if (error || !reports || !trends) return <ErrorView message={error ?? 'No data'} />
@@ -121,11 +173,12 @@ export function Overview({ stats, events, onDrillDown }: Props) {
   const projectedMonth = projectMonth(monthCost, daysElapsed, daysInMonth)
   const budgetOver = budget ? projectedMonth > budget.amount : false
 
-  // Charts + breakdowns
-  const chartData = buildChartData(stats, reports)
-  const modelBreakdown = buildModelBreakdown(events, pricing)
-  const projectBreakdown = buildProjectBreakdown(events, pricing)
-  const hourActivity = buildHourActivity(events)
+  // Charts + breakdowns — all use the windowed inputs so the period toggle
+  // cascades through every visualization on the page.
+  const chartData = buildChartData(windowedStats, reports)
+  const modelBreakdown = buildModelBreakdown(windowedEvents, pricing)
+  const projectBreakdown = buildProjectBreakdown(windowedEvents, pricing, projectPaths)
+  const hourActivity = buildHourActivity(windowedEvents)
   const recentSessions = reports.sessions.slice(0, 5)
 
   // Top 3 insights (alert + warning first)
@@ -135,8 +188,33 @@ export function Overview({ stats, events, onDrillDown }: Props) {
     <div>
       <SectionHeader
         title="Overview"
-        sub={`Snapshot of your Claude Code activity · ${stats.date_range ? `${stats.date_range[0]} – ${stats.date_range[1]}` : 'no data yet'}`}
+        sub={`Snapshot of your Claude Code activity${windowedStats.date_range ? ` · ${windowedStats.date_range[0]} – ${windowedStats.date_range[1]}` : ''}`}
       />
+
+      {/* ── Time period toggle ────────────────────────────────────────── */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+        {WINDOWS.map(w => (
+          <button
+            key={w}
+            onClick={() => setWindow(w)}
+            style={{
+              background: window === w ? c.surfaceHover : c.surface,
+              border: `1px solid ${window === w ? c.accent : c.border}`,
+              color: window === w ? c.text : c.textFaint,
+              borderRadius: 4,
+              padding: '5px 14px',
+              fontSize: 11,
+              cursor: 'pointer',
+              fontWeight: window === w ? 600 : 400,
+              fontFamily: 'inherit',
+              textTransform: 'uppercase',
+              letterSpacing: 0.5,
+            }}
+          >
+            {w === 'all' ? 'All time' : `Last ${w}`}
+          </button>
+        ))}
+      </div>
 
       {/* ── Hero metrics ──────────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -779,7 +857,11 @@ function buildModelBreakdown(events: UsageEvent[], pricing: PricingTable) {
     .slice(0, 5)
 }
 
-function buildProjectBreakdown(events: UsageEvent[], pricing: PricingTable) {
+function buildProjectBreakdown(
+  events: UsageEvent[],
+  pricing: PricingTable,
+  projectPaths: Record<string, string>,
+) {
   const agg = new Map<string, { cost: number; events: number }>()
   for (const ev of events) {
     const cur = agg.get(ev.project_id) ?? { cost: 0, events: 0 }
@@ -789,29 +871,33 @@ function buildProjectBreakdown(events: UsageEvent[], pricing: PricingTable) {
   }
   const maxCost = [...agg.values()].reduce((m, v) => Math.max(m, v.cost), 0)
   return [...agg.entries()]
-    .map(([id, v]) => ({
-      label: shortenProjectId(id),
-      fullPath: decodeProjectId(id),
-      cost: v.cost,
-      events: v.events,
-      pct: maxCost > 0 ? (v.cost / maxCost) * 100 : 0,
-    }))
+    .map(([id, v]) => {
+      const fullPath = projectPaths[id] ?? decodeProjectIdFallback(id)
+      return {
+        label: shortenPath(fullPath),
+        fullPath,
+        cost: v.cost,
+        events: v.events,
+        pct: maxCost > 0 ? (v.cost / maxCost) * 100 : 0,
+      }
+    })
     .sort((a, b) => b.cost - a.cost)
     .slice(0, 5)
 }
 
-/** Decode Claude Code's path-encoded project ID back to a real path. */
-function decodeProjectId(id: string): string {
-  // Claude Code encodes `/Users/alice/myrepo` as `-Users-alice-myrepo`. We can't
-  // reliably recover dashes within real names, but for display the last few
-  // segments are enough.
+/**
+ * Fallback decoder for projects that have no JSONL events (rare).
+ * Lossy — cannot distinguish path segments from literal dashes in directory
+ * names like `oxy-hq`. Only used when the `cwd` ground truth is missing.
+ */
+function decodeProjectIdFallback(id: string): string {
   return '/' + id.replace(/^-/, '').split('-').join('/')
 }
 
-/** Short label for project breakdown cards — shows last 2 path segments. */
-function shortenProjectId(id: string): string {
-  const parts = id.replace(/^-/, '').split('-').filter(Boolean)
-  if (parts.length === 0) return id
+/** Display label for a project breakdown row: last 2 real path segments. */
+function shortenPath(fullPath: string): string {
+  const parts = fullPath.split('/').filter(Boolean)
+  if (parts.length === 0) return fullPath
   if (parts.length === 1) return parts[0]
   return `${parts[parts.length - 2]}/${parts[parts.length - 1]}`
 }
