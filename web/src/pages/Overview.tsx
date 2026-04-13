@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { StatsData, UsageEvent } from '../api'
+import type { StatsData, UsageEvent, AccountInfo } from '../api'
 import { SectionHeader } from '../components/SectionHeader'
 import { StatCard } from '../components/StatCard'
 import { c } from '../theme/colors'
@@ -50,7 +50,11 @@ interface Props {
   events: UsageEvent[]
   /** Map from Claude Code's encoded project id → real filesystem path. */
   projectPaths: Record<string, string>
+  /** Parsed from ~/.claude.json if available, null if not loaded yet. */
+  account: AccountInfo | null
   onDrillDown: (target: 'Analytics' | 'Projects' | 'Activity' | 'Config') => void
+  /** Callback to trigger the file picker for the account JSON. */
+  onPickAccountFile: () => void
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -85,7 +89,7 @@ function filterByWindow<T extends { timestamp: string } | { date: string }>(
   })
 }
 
-export function Overview({ stats, events, projectPaths, onDrillDown }: Props) {
+export function Overview({ stats, events, projectPaths, account, onDrillDown, onPickAccountFile }: Props) {
   const [window, setWindow] = useState<Window>('all')
   const [reports, setReports] = useState<Reports | null>(null)
   const [trends, setTrends] = useState<TrendMetrics | null>(null)
@@ -256,6 +260,15 @@ export function Overview({ stats, events, projectPaths, onDrillDown }: Props) {
           ))}
         </div>
       )}
+
+      {/* ── Account card ────────────────────────────────────────────────── */}
+      <AccountCard
+        account={account}
+        events={windowedEvents}
+        projectPaths={projectPaths}
+        onPickAccountFile={onPickAccountFile}
+        onDrillDown={() => onDrillDown('Config')}
+      />
 
       {/* ── Primary chart ────────────────────────────────────────────────── */}
       <ChartCard title="Last 30 Days">
@@ -452,6 +465,170 @@ function BudgetCard({ budget, mtd, projected, over }: {
       <div style={{ color: c.textGhost, fontSize: 10 }}>
         projected: {fmtCost(projected)}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Compact account analytics card for the Overview page. Shows account UUID,
+ * numStartups, and a reconciliation of Claude Code's own `lastCost` vs our
+ * LiteLLM-derived computation — or a "pick .claude.json" CTA when no file
+ * has been loaded yet.
+ */
+function AccountCard({
+  account, events, projectPaths, onPickAccountFile, onDrillDown,
+}: {
+  account: AccountInfo | null
+  events: UsageEvent[]
+  projectPaths: Record<string, string>
+  onPickAccountFile: () => void
+  onDrillDown: () => void
+}) {
+  // ── Empty state: CTA to pick the file
+  if (!account) {
+    return (
+      <div style={{
+        background: c.surface, border: `1px solid ${c.border}`,
+        borderLeft: `3px solid ${c.warning}`,
+        borderRadius: 6, padding: '14px 18px', marginBottom: 20,
+        display: 'flex', alignItems: 'center', gap: 14,
+      }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ color: c.text, fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
+            Unlock account analytics
+          </div>
+          <div style={{ color: c.textFaint, fontSize: 12, lineHeight: 1.5 }}>
+            Pick <code style={{
+              background: c.surfaceHover, padding: '1px 6px', borderRadius: 3,
+              fontSize: 11, fontFamily: 'monospace',
+            }}>~/.claude.json</code> to see Claude Code's own per-project cost tracking,
+            org/account UUIDs, lifetime CLI startups, and MCP server list.
+            Tokens + credentials are stripped in-worker before reaching the UI.
+          </div>
+        </div>
+        <button
+          onClick={onPickAccountFile}
+          style={{
+            background: c.accent, color: c.accentFg, border: 'none',
+            borderRadius: 4, padding: '8px 16px', fontSize: 12,
+            fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+          }}
+        >
+          Pick .claude.json
+        </button>
+      </div>
+    )
+  }
+
+  // ── Loaded state: compact stats + top 3 cost reconciliation
+  const computedByPath = new Map<string, number>()
+  for (const ev of events) {
+    const path = projectPaths[ev.project_id] ?? ev.project_id
+    const p = pricingJson[ev.model as keyof typeof pricingJson] as
+      | Record<string, number> | undefined
+    if (!p) continue
+    const cost =
+      ev.input_tokens * (p.input_cost_per_token ?? 0) +
+      ev.output_tokens * (p.output_cost_per_token ?? 0) +
+      ev.cache_creation_input_tokens * (p.cache_creation_input_token_cost ?? 0) +
+      ev.cache_read_input_tokens * (p.cache_read_input_token_cost ?? 0)
+    computedByPath.set(path, (computedByPath.get(path) ?? 0) + cost)
+  }
+
+  const topCosts = account.projectCosts.slice(0, 3)
+  const totalClaudeCode = account.projectCosts.reduce((s, p) => s + p.lastCost, 0)
+
+  return (
+    <div style={{
+      background: c.surface, border: `1px solid ${c.border}`,
+      borderRadius: 6, padding: 16, marginBottom: 20,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ color: c.accent, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          Account Analytics
+        </div>
+        <button
+          onClick={onDrillDown}
+          style={{
+            background: 'transparent', border: 'none', color: c.textFaint,
+            fontSize: 11, cursor: 'pointer', padding: 0,
+          }}
+        >
+          Full details →
+        </button>
+      </div>
+
+      {/* Stat row */}
+      <div style={{ display: 'flex', gap: 24, marginBottom: 14, flexWrap: 'wrap', fontSize: 12 }}>
+        <div>
+          <div style={{ color: c.textFaint, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>Lifetime startups</div>
+          <div style={{ color: c.text, fontWeight: 600, fontSize: 14 }}>{account.numStartups.toLocaleString()}</div>
+        </div>
+        <div>
+          <div style={{ color: c.textFaint, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>Install</div>
+          <div style={{ color: c.text, fontWeight: 600, fontSize: 14 }}>{account.installMethod ?? '—'}</div>
+        </div>
+        <div>
+          <div style={{ color: c.textFaint, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>MCP servers</div>
+          <div style={{ color: c.text, fontWeight: 600, fontSize: 14 }}>
+            {account.mcpServers.length}
+            {account.mcpServers.length > 0 && (
+              <span style={{ color: c.textFaint, fontWeight: 400, fontSize: 11, marginLeft: 6 }}>
+                ({account.mcpServers.slice(0, 2).join(', ')}{account.mcpServers.length > 2 && '…'})
+              </span>
+            )}
+          </div>
+        </div>
+        <div>
+          <div style={{ color: c.textFaint, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>Claude Code's $</div>
+          <div style={{ color: c.success, fontWeight: 600, fontSize: 14 }}>{fmtCost(totalClaudeCode)}</div>
+        </div>
+      </div>
+
+      {/* Top cost reconciliation */}
+      {topCosts.length > 0 && (
+        <div>
+          <div style={{ color: c.textFaint, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+            Top 3 projects · Claude Code vs computed
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {topCosts.map(row => {
+              const computed = computedByPath.get(row.path) ?? 0
+              const delta = computed - row.lastCost
+              const deltaPct = row.lastCost > 0 ? (delta / row.lastCost) * 100 : 0
+              const deltaColor =
+                Math.abs(deltaPct) < 10 ? c.success :
+                Math.abs(deltaPct) < 30 ? c.warning : c.error
+              return (
+                <div key={row.path} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  fontSize: 11, padding: '4px 0',
+                  borderTop: `1px solid ${c.borderSoft}`,
+                }}>
+                  <span style={{
+                    flex: 1, color: c.textMuted, fontFamily: 'monospace',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }} title={row.path}>
+                    {row.path.split('/').slice(-2).join('/')}
+                  </span>
+                  <span style={{ color: c.text, fontVariantNumeric: 'tabular-nums', minWidth: 60, textAlign: 'right' }}>
+                    {fmtCost(row.lastCost)}
+                  </span>
+                  <span style={{ color: c.textFaint, fontVariantNumeric: 'tabular-nums', minWidth: 60, textAlign: 'right' }}>
+                    {fmtCost(computed)}
+                  </span>
+                  <span style={{
+                    color: deltaColor, fontVariantNumeric: 'tabular-nums',
+                    minWidth: 50, textAlign: 'right', fontWeight: 600,
+                  }}>
+                    {row.lastCost === 0 ? '—' : `${delta >= 0 ? '+' : ''}${deltaPct.toFixed(0)}%`}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
