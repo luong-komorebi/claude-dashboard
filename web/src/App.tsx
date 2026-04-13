@@ -3,6 +3,7 @@ import type { DashboardData } from './api'
 import type { WorkerResponse } from './worker/parser.worker'
 import { pickClaudeDir, getStoredDir, clearHandle, ensurePermission } from './fs-access'
 import { saveToOpfs, loadFromOpfs, clearOpfsCache, cleanupLegacyCache } from './opfs'
+import { isStoragePersisted, requestPersistence } from './persistence'
 import { createSyncChannel, broadcast, withParseLock, type SyncMessage } from './sync'
 import { exportDashboard } from './export'
 import { Overview } from './pages/Overview'
@@ -71,10 +72,18 @@ export default function App() {
   const tabIndexRef = useRef(TABS.indexOf('Overview'))
   const channelRef = useRef<BroadcastChannel | null>(null)
 
-  // ── Startup: cleanup legacy cache, open sync channel, load data
+  // ── Startup: cleanup legacy cache, try persistent storage, open sync channel, load data
   useEffect(() => {
     let cancelled = false
     void cleanupLegacyCache()
+
+    // Opportunistic silent request — Chrome/Edge auto-grant if eligible
+    // (installed PWA, high engagement, etc). Firefox shows a prompt, which
+    // we skip here because there's no user gesture yet — the explicit button
+    // in PrivacyBadge handles that case.
+    void isStoragePersisted().then(already => {
+      if (!already) void requestPersistence()
+    })
 
     // Multi-tab sync channel — listens for "refreshed" from other tabs
     const channel = createSyncChannel()

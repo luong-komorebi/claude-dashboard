@@ -1,5 +1,10 @@
-import { useEffect, useId, useState } from 'react'
+import { useCallback, useEffect, useId, useState } from 'react'
 import { getStorageEstimate } from '../opfs'
+import {
+  isPersistenceSupported,
+  isStoragePersisted,
+  requestPersistence,
+} from '../persistence'
 import { c } from '../theme/colors'
 
 /**
@@ -41,11 +46,24 @@ export function PrivacyBadge({ variant = 'compact' }: Props) {
   const popoverId = useId()
   const externalCount = useExternalRequestCount()
   const [storage, setStorage] = useState<{ usageKb: number; quotaMb: number } | null>(null)
+  const [persisted, setPersisted] = useState<boolean | null>(null)
+  const [persistRequesting, setPersistRequesting] = useState(false)
   const safe = externalCount === 0
 
   useEffect(() => {
     void getStorageEstimate().then(setStorage)
+    void isStoragePersisted().then(setPersisted)
   }, [externalCount])
+
+  const enablePersistence = useCallback(async () => {
+    setPersistRequesting(true)
+    try {
+      const granted = await requestPersistence()
+      setPersisted(granted)
+    } finally {
+      setPersistRequesting(false)
+    }
+  }, [])
 
   const color = safe ? c.success : c.error
   const bg = safe ? c.successBg : c.errorBg
@@ -133,6 +151,52 @@ export function PrivacyBadge({ variant = 'compact' }: Props) {
             Local storage: <strong style={{ color: c.textDim }}>{storage.usageKb} KB</strong>
             {storage.quotaMb > 0 && <> of {storage.quotaMb} MB available</>}
             <span style={{ marginLeft: 6, color: c.textDisabled }}>(OPFS, never sent anywhere)</span>
+          </div>
+        )}
+
+        {isPersistenceSupported() && persisted !== null && (
+          <div style={{
+            fontSize: 11,
+            color: c.textFaint,
+            paddingTop: 10,
+            marginTop: 8,
+            borderTop: `1px solid ${c.borderSoft}`,
+            lineHeight: 1.6,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: persisted ? 0 : 8 }}>
+              <span>Persistent storage:</span>
+              {persisted ? (
+                <strong style={{ color: c.success }}>✓ enabled</strong>
+              ) : (
+                <strong style={{ color: c.warning }}>off — data may be evicted</strong>
+              )}
+            </div>
+            {!persisted && (
+              <>
+                <div style={{ color: c.textGhost, fontSize: 10, marginBottom: 8 }}>
+                  Without this, browsers can clear your folder permission + cached dashboard under
+                  disk pressure (or after 7 days on Safari). Click to ask the browser to keep it forever.
+                </div>
+                <button
+                  type="button"
+                  onClick={enablePersistence}
+                  disabled={persistRequesting}
+                  style={{
+                    background: c.accent,
+                    color: c.accentFg,
+                    border: 'none',
+                    borderRadius: 3,
+                    padding: '5px 12px',
+                    fontSize: 11,
+                    cursor: persistRequesting ? 'default' : 'pointer',
+                    fontWeight: 600,
+                    opacity: persistRequesting ? 0.5 : 1,
+                  }}
+                >
+                  {persistRequesting ? 'Requesting…' : 'Enable persistent storage'}
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
