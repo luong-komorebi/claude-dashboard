@@ -19,7 +19,7 @@ import { c } from './theme/colors'
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
 
-const TABS = ['Overview', 'Insights', 'Reports', 'Usage', 'Sessions', 'Projects', 'Plugins', 'Todos', 'Settings'] as const
+const TABS = ['Overview', 'Analytics', 'Projects', 'Activity', 'Config'] as const
 type Tab = typeof TABS[number]
 
 // ─── State machine ───────────────────────────────────────────────────────────
@@ -509,14 +509,10 @@ export default function App() {
       {/* Main content — view-transition-name is set via .tab-content class */}
       <div className="tab-content" style={{ flex: 1, padding: 24, overflow: 'auto' }}>
         {tab === 'Overview'  && <Overview  stats={data.stats} events={data.usage_events} onDrillDown={changeTab} />}
-        {tab === 'Insights'  && <Insights  stats={data.stats} events={data.usage_events} />}
-        {tab === 'Reports'   && <ReportsPage events={data.usage_events} />}
-        {tab === 'Usage'     && <Usage     data={data.usage} />}
-        {tab === 'Sessions'  && <Sessions  data={data.sessions} />}
+        {tab === 'Analytics' && <Analytics stats={data.stats} events={data.usage_events} />}
         {tab === 'Projects'  && <Projects  data={data.projects} />}
-        {tab === 'Plugins'   && <Plugins   data={data.plugins} />}
-        {tab === 'Todos'     && <Todos     data={data.todos} />}
-        {tab === 'Settings'  && <Settings  data={data.settings} />}
+        {tab === 'Activity'  && <Activity  data={data} />}
+        {tab === 'Config'    && <Config    data={data} />}
       </div>
 
       <SupportButton />

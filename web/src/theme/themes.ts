@@ -106,4 +106,4 @@ export const THEMES: ThemeMeta[] = [
   },
 ]
 
-export const DEFAULT_THEME_ID = 'github-dark'
+export const DEFAULT_THEME_ID = 'tokyo-night'

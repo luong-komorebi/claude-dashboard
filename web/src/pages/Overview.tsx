@@ -4,10 +4,10 @@ import { SectionHeader } from '../components/SectionHeader'
 import { StatCard } from '../components/StatCard'
 import { c } from '../theme/colors'
 import pricingJson from '../cost/pricing.json'
-import type { Reports, PricingTable, BlockRow, SessionRow, Insight } from '../cost/types'
+import type { Reports, PricingTable, BlockRow, SessionRow, Insight, ForecastOutput } from '../cost/types'
 import { getBudget, projectMonth } from '../cost/budget'
 import {
-  Bar, BarChart, Line, XAxis, YAxis,
+  Area, Bar, BarChart, Line, XAxis, YAxis,
   Tooltip, ResponsiveContainer, CartesianGrid, ComposedChart,
 } from 'recharts'
 
@@ -48,7 +48,7 @@ interface TrendMetrics {
 interface Props {
   stats: StatsData
   events: UsageEvent[]
-  onDrillDown: (target: 'Reports' | 'Insights' | 'Sessions' | 'Projects') => void
+  onDrillDown: (target: 'Analytics' | 'Projects' | 'Activity' | 'Config') => void
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -57,6 +57,7 @@ export function Overview({ stats, events, onDrillDown }: Props) {
   const [reports, setReports] = useState<Reports | null>(null)
   const [trends, setTrends] = useState<TrendMetrics | null>(null)
   const [insights, setInsights] = useState<Insight[]>([])
+  const [forecast, setForecast] = useState<ForecastOutput | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -81,9 +82,18 @@ export function Overview({ stats, events, onDrillDown }: Props) {
         const insightsRaw = wasm.compute_insights(JSON.stringify({ events, pricing }))
         if (insightsRaw.startsWith('error:')) throw new Error(insightsRaw.slice(6))
 
+        // Forecast — Holt-Winters on daily message counts (14-day horizon for preview)
+        const forecastRaw = wasm.compute_forecast(JSON.stringify({
+          daily: stats.daily_activity.map(d => d.message_count),
+          horizon: 14,
+          season_length: 7,
+        }))
+        if (forecastRaw.startsWith('error:')) throw new Error(forecastRaw.slice(6))
+
         setReports(JSON.parse(reportsRaw) as Reports)
         setTrends(JSON.parse(trendsRaw) as TrendMetrics)
         setInsights(JSON.parse(insightsRaw) as Insight[])
+        setForecast(JSON.parse(forecastRaw) as ForecastOutput)
       })
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false))
@@ -164,7 +174,7 @@ export function Overview({ stats, events, onDrillDown }: Props) {
           marginBottom: 20,
         }}>
           {topInsights.map((ins, i) => (
-            <InsightCard key={i} insight={ins} onClick={() => onDrillDown('Insights')} />
+            <InsightCard key={i} insight={ins} onClick={() => onDrillDown('Analytics')} />
           ))}
         </div>
       )}
@@ -209,6 +219,16 @@ export function Overview({ stats, events, onDrillDown }: Props) {
         ]} />
       </ChartCard>
 
+      {/* ── Forecast preview + Mini heatmap ─────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+        <ForecastPreview
+          stats={stats}
+          forecast={forecast}
+          onMore={() => onDrillDown('Analytics')}
+        />
+        <MiniHeatmap events={events} onMore={() => onDrillDown('Analytics')} />
+      </div>
+
       {/* ── Spend breakdowns ─────────────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
         <ModelUsage breakdown={modelBreakdown} />
@@ -217,7 +237,7 @@ export function Overview({ stats, events, onDrillDown }: Props) {
 
       {/* ── Activity details ─────────────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
-        <RecentSessions rows={recentSessions} onMore={() => onDrillDown('Reports')} />
+        <RecentSessions rows={recentSessions} onMore={() => onDrillDown('Analytics')} />
         <HourActivity buckets={hourActivity} />
       </div>
 
@@ -226,12 +246,12 @@ export function Overview({ stats, events, onDrillDown }: Props) {
         <DrillCard
           label="Forecasts & Insights"
           description="Holt-Winters forecast, anomaly detection, heatmap, what-if simulator"
-          onClick={() => onDrillDown('Insights')}
+          onClick={() => onDrillDown('Analytics')}
         />
         <DrillCard
           label="Detailed Reports"
           description="Daily, Weekly, Monthly, Sessions, and 5-hour Blocks"
-          onClick={() => onDrillDown('Reports')}
+          onClick={() => onDrillDown('Analytics')}
         />
       </div>
     </div>
@@ -538,6 +558,163 @@ function HourActivity({ buckets }: { buckets: { hour: number; events: number }[]
       )}
     </SectionCard>
   )
+}
+
+function ForecastPreview({
+  stats, forecast, onMore,
+}: { stats: StatsData; forecast: ForecastOutput | null; onMore: () => void }) {
+  if (!forecast || forecast.forecast.length === 0) {
+    return (
+      <SectionCard title="14-day Forecast" onMore={onMore} moreLabel="Details →">
+        <div style={{ color: c.textGhost, fontSize: 12, padding: '8px 0' }}>
+          Not enough data — need at least 2 weeks of activity for a reliable forecast.
+        </div>
+      </SectionCard>
+    )
+  }
+
+  // Last 14 actuals + 14 forecast days, with CI band stacked as (lower + range)
+  const lastN = 14
+  const actuals = stats.daily_activity.slice(-lastN)
+  type Pt = { date: string; actual?: number; forecast?: number; lower?: number; range?: number }
+  const points: Pt[] = actuals.map(d => ({ date: shortDate(d.date), actual: d.message_count }))
+
+  if (actuals.length > 0) {
+    const lastDate = actuals[actuals.length - 1].date
+    for (let h = 0; h < forecast.forecast.length; h++) {
+      const p = forecast.forecast[h]
+      points.push({
+        date: shortDate(addDays(lastDate, h + 1)),
+        forecast: p.value,
+        lower: p.lower,
+        range: Math.max(0, p.upper - p.lower),
+      })
+    }
+  }
+
+  // Summary: total forecast messages over the 14-day window
+  const forecastTotal = forecast.forecast.reduce((s, p) => s + p.value, 0)
+  const anomalyCount = forecast.anomalies.length
+
+  return (
+    <SectionCard title="14-day Forecast" onMore={onMore} moreLabel="Details →">
+      <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 8 }}>
+        Next 14 days: <strong style={{ color: c.text }}>{fmtTokens(forecastTotal)}</strong> messages projected
+        {anomalyCount > 0 && <> · {anomalyCount} anomal{anomalyCount === 1 ? 'y' : 'ies'} flagged</>}
+      </div>
+      <ResponsiveContainer width="100%" height={140}>
+        <ComposedChart data={points} margin={{ top: 4, right: 8, bottom: 4, left: -18 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={c.surfaceHover} />
+          <XAxis dataKey="date" tick={{ fill: c.textGhost, fontSize: 9 }} tickLine={false} interval={3} />
+          <YAxis tick={{ fill: c.textGhost, fontSize: 9 }} tickLine={false} axisLine={false} width={30} />
+          <Tooltip
+            contentStyle={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, borderRadius: 4, fontSize: 11 }}
+            labelStyle={{ color: c.textMuted }}
+          />
+          {/* Stacked area trick — transparent `lower` + colored `range` = CI band */}
+          <Area type="monotone" dataKey="lower" stackId="ci" stroke="transparent" fill="transparent" legendType="none" name="" />
+          <Area type="monotone" dataKey="range" stackId="ci" stroke="transparent" fill={c.accent} fillOpacity={0.12} name="80% CI" />
+          <Line type="monotone" dataKey="actual" stroke={c.text} dot={false} strokeWidth={1.5} name="Actual" connectNulls={false} />
+          <Line type="monotone" dataKey="forecast" stroke={c.accent} dot={false} strokeWidth={2} name="Forecast" connectNulls={false} />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </SectionCard>
+  )
+}
+
+/**
+ * Compact 12-week heatmap (84 days). Mirrors the full-year Heatmap but
+ * scaled down for the Overview. Click "Details →" to jump to the full view
+ * in Analytics → Heatmap.
+ */
+function MiniHeatmap({ events, onMore }: { events: UsageEvent[]; onMore: () => void }) {
+  const WEEKS = 12
+  const cells = useMemo(() => buildMiniHeatmapCells(events, WEEKS), [events])
+  const max = useMemo(() => Math.max(1, ...cells.map(c => c.events)), [cells])
+
+  const active = cells.filter(c => c.events > 0).length
+  const total = cells.reduce((s, c) => s + c.events, 0)
+
+  if (total === 0) {
+    return (
+      <SectionCard title={`Last ${WEEKS} Weeks`} onMore={onMore} moreLabel="Full year →">
+        <div style={{ color: c.textGhost, fontSize: 12, padding: '8px 0' }}>No events yet</div>
+      </SectionCard>
+    )
+  }
+
+  const cellSize = 12
+  const gap = 3
+  const step = cellSize + gap
+  const width = WEEKS * step + 20
+  const height = 7 * step + 4
+
+  return (
+    <SectionCard title={`Last ${WEEKS} Weeks`} onMore={onMore} moreLabel="Full year →">
+      <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 10 }}>
+        {active} active of {WEEKS * 7} days · {total} events
+      </div>
+      <svg width={width} height={height} style={{ display: 'block' }}>
+        {cells.map((cell, i) => {
+          const col = Math.floor(i / 7)
+          const row = i % 7
+          const intensity = max > 0 ? cell.events / max : 0
+          const opacity = cell.events === 0 ? 0 : 0.2 + intensity * 0.8
+          return (
+            <rect
+              key={i}
+              x={col * step}
+              y={row * step}
+              width={cellSize}
+              height={cellSize}
+              rx={2}
+              ry={2}
+              fill={cell.events === 0 ? c.surfaceHover : `rgba(88, 166, 255, ${opacity})`}
+              stroke={c.borderSoft}
+              strokeWidth={0.5}
+            >
+              <title>{cell.date}: {cell.events} events</title>
+            </rect>
+          )
+        })}
+      </svg>
+    </SectionCard>
+  )
+}
+
+function buildMiniHeatmapCells(events: UsageEvent[], weeks: number) {
+  const days = weeks * 7
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  // Align the right edge to today; days go oldest → newest, column by column.
+  // Each "column" is a week (Sun..Sat or similar — we just bucket by index).
+  const cells: { date: string; events: number }[] = []
+  const start = new Date(today)
+  start.setDate(start.getDate() - (days - 1))
+
+  for (let i = 0; i < days; i++) {
+    const d = new Date(start)
+    d.setDate(start.getDate() + i)
+    const iso = d.toISOString().slice(0, 10)
+    cells.push({ date: iso, events: 0 })
+  }
+
+  const idxByDate = new Map(cells.map((c, i) => [c.date, i]))
+  for (const ev of events) {
+    const iso = ev.timestamp.slice(0, 10)
+    const idx = idxByDate.get(iso)
+    if (idx !== undefined) cells[idx].events += 1
+  }
+
+  return cells
+}
+
+function addDays(isoDate: string, days: number): string {
+  const [y, m, d] = isoDate.split('-').map(Number)
+  const date = new Date(Date.UTC(y, m - 1, d))
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
 }
 
 function DrillCard({ label, description, onClick }: { label: string; description: string; onClick: () => void }) {

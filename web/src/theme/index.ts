@@ -12,12 +12,13 @@ import { THEMES, DEFAULT_THEME_ID, type ThemeMeta } from './themes'
 const STORAGE_KEY = 'claude-dashboard:theme'
 
 /**
- * Legacy theme IDs → current IDs. Users who stored the old "default" value
- * (from before the GitHub-Dark rename) are transparently remapped so their
- * saved preference doesn't silently revert.
+ * Legacy theme IDs → current IDs. Users who stored an old ID are
+ * transparently remapped so their saved preference doesn't silently
+ * revert. Only "default" (the very first app name) is remapped — explicit
+ * choices like `github-dark` are preserved even after the default changes.
  */
 const LEGACY_ID_ALIASES: Record<string, string> = {
-  default: 'github-dark',
+  default: DEFAULT_THEME_ID,
 }
 
 export function getStoredThemeId(): string {

@@ -189,13 +189,23 @@ async function parseSessions(dir: FileSystemDirectoryHandle): Promise<SessionFac
 }
 
 /**
- * Walks projects/<id>/<uuid>.jsonl session logs and extracts one UsageEvent
- * per assistant message that carries `message.usage`. Line-by-line streaming
- * via Blob.stream() + TextDecoderStream keeps peak memory low even for very
- * long histories.
+ * Walks projects/<id>/<uuid>.jsonl session logs and returns:
+ *   - an array of UsageEvents (one per assistant message with `message.usage`)
+ *   - a map from projectId → real filesystem path ("cwd")
+ *
+ * Claude Code encodes project directory names by replacing `/` with `-`,
+ * which is lossy: a folder literally named "oxy-hq" and a path segment
+ * boundary are indistinguishable after encoding. The JSONL events carry a
+ * `cwd` field with the unencoded path, so we use that as the ground truth.
+ *
+ * Line-by-line streaming via Blob.stream() + TextDecoderStream keeps peak
+ * memory low even for very long histories.
  */
-async function parseUsageEvents(dir: FileSystemDirectoryHandle): Promise<UsageEvent[]> {
+async function parseUsageEvents(
+  dir: FileSystemDirectoryHandle,
+): Promise<{ events: UsageEvent[]; projectPaths: Map<string, string> }> {
   const events: UsageEvent[] = []
+  const projectPaths = new Map<string, string>()
 
   for await (const [projectId, projHandle] of await listDir(dir, 'projects')) {
     if (projHandle.kind !== 'directory') continue
@@ -207,7 +217,6 @@ async function parseUsageEvents(dir: FileSystemDirectoryHandle): Promise<UsageEv
       const sessionId = name.replace('.jsonl', '')
       const file = await (entry as FileSystemFileHandle).getFile()
 
-      // Stream line-by-line instead of loading the whole file into memory
       const stream = file.stream().pipeThrough(new TextDecoderStream())
       let buffer = ''
 
@@ -220,14 +229,27 @@ async function parseUsageEvents(dir: FileSystemDirectoryHandle): Promise<UsageEv
           newline = buffer.indexOf('\n')
           if (!line) continue
           try {
+            // Opportunistic cwd capture — any line that has a `cwd` field
+            // tells us the real path for this encoded projectId.
+            if (!projectPaths.has(projectId) && line.includes('"cwd"')) {
+              const parsed = JSON.parse(line) as { cwd?: string }
+              if (typeof parsed.cwd === 'string' && parsed.cwd.length > 0) {
+                projectPaths.set(projectId, parsed.cwd)
+              }
+            }
             const ev = extractUsageEvent(line, sessionId, projectId)
             if (ev) events.push(ev)
           } catch { /* skip malformed line */ }
         }
       }
-      // Final line (no trailing newline)
       if (buffer) {
         try {
+          if (!projectPaths.has(projectId) && buffer.includes('"cwd"')) {
+            const parsed = JSON.parse(buffer) as { cwd?: string }
+            if (typeof parsed.cwd === 'string' && parsed.cwd.length > 0) {
+              projectPaths.set(projectId, parsed.cwd)
+            }
+          }
           const ev = extractUsageEvent(buffer, sessionId, projectId)
           if (ev) events.push(ev)
         } catch { /* skip */ }
@@ -235,7 +257,7 @@ async function parseUsageEvents(dir: FileSystemDirectoryHandle): Promise<UsageEv
     }
   }
 
-  return events
+  return { events, projectPaths }
 }
 
 interface JsonlMessage {
