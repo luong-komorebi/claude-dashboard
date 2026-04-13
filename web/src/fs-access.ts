@@ -1,3 +1,5 @@
+import { clearOnlineConfig } from './online/config'
+
 /**
  * File System Access API — handle persistence + arbitrary CLAUDE_CONFIG_DIR
  * support.
@@ -241,6 +243,10 @@ export async function wipeAllPersistedState(): Promise<void> {
   // Clear IndexedDB handles
   await clearHandle()
   await clearAccountFile()
+  // Explicitly wipe the online-mode admin API key (localStorage.clear() covers
+  // this too, but an explicit call is load-bearing documentation — this key
+  // is the most sensitive item persisted and deserves its own line)
+  clearOnlineConfig()
   // Wipe localStorage — theme, budget, etc.
   try {
     localStorage.clear()

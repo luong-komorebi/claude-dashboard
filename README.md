@@ -38,11 +38,24 @@ Three ways to run without internet:
 
 ## Privacy
 
-- `Content-Security-Policy: connect-src 'self'` physically blocks outbound connections — verifiable in DevTools → Network (shows 0 external requests)
+- `Content-Security-Policy` whitelists exactly two destinations: `'self'` and `https://api.anthropic.com`. The Anthropic origin is only reachable when **online mode** is explicitly enabled — when it's off, the browser refuses to even attempt a connection to it
 - No telemetry, no analytics, no third-party scripts
 - All parsing + analytics runs locally in a Web Worker + Rust/WASM
 - Persistent storage API enabled on request so the browser never evicts your folder handle
 - OAuth tokens, MCP server credentials, and any other secrets in `.claude.json` are stripped **inside the Web Worker** before reaching the main thread — they never touch the UI or get persisted to OPFS
+- The **privacy badge** in the sidebar has three states:
+  - 🟢 **green** — 0 external requests, no opt-in active (default)
+  - 🟡 **yellow** — online mode on; only `api.anthropic.com` is reachable
+  - 🔴 **red** — an unexpected external request fired (shouldn't happen; indicates a bug)
+
+## Online mode (optional, opt-in)
+
+Config → Settings → Online mode enables a direct call from the browser to Anthropic's [Claude Code Analytics Admin API](https://platform.claude.com/docs/en/build-with-claude/claude-code-analytics-api) to fetch organization-wide live usage (org cost, sessions, lines-of-code, tool-acceptance rates, commits, PRs, per-user breakdowns).
+
+- **Admin-only.** Requires an Admin API key (`sk-ant-admin...`) from the Claude Console. Individual Pro/Max/API users cannot use this API and will see HTTP 403.
+- **Your key stays in your browser.** Persisted in localStorage, sent only to `api.anthropic.com`, cleared by the "Clear web data" button.
+- **Two layers of defense.** CSP allows the destination, AND the fetch wrapper refuses to call the API when the toggle is off — so even if CSP is misconfigured, no request fires without the toggle.
+- **CORS is not officially documented for this endpoint** — Anthropic may or may not accept browser preflights. If it fails, the UI surfaces a clear error with the exact HTTP response, and your fallback is a CI/cron job with the same API.
 
 ## What gets read (and what doesn't)
 

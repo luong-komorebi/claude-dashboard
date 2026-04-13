@@ -73,6 +73,46 @@ React pages (pages/*.tsx) — 5 top-level tabs
 
 All I/O except the initial folder pick happens in the Worker so the UI never blocks.
 
+### Online mode (Claude Code Analytics Admin API)
+
+Opt-in feature in **Config → Settings → Online mode**. When enabled, the dashboard calls Anthropic's Admin API directly from the browser. Architecture:
+
+```
+User toggles on → config.ts writes localStorage → Overview refetches
+                                                       │
+                                                       ▼
+                                           api.ts fetches with:
+                                             - x-api-key: sk-ant-admin...
+                                             - anthropic-version: 2023-06-01
+                                             - anthropic-dangerous-direct-browser-access: true
+                                           (credentials: 'omit', mode: 'cors')
+                                                       │
+                                                       ▼
+                                     Walks pagination cursor for N days
+                                                       │
+                                                       ▼
+                                        Rolls records into LiveUsageSummary
+                                                       │
+                                                       ▼
+                                        LiveUsageCard renders on Overview
+```
+
+**Three layers of defense around the admin key:**
+1. **CSP** whitelists `https://api.anthropic.com` in `connect-src`. No other external origin is reachable — even with a bug in the fetch wrapper.
+2. **App-layer gate**: `LiveUsageCard` checks `getOnlineConfig().enabled` before calling `fetchLiveUsage`. Flipping CSP without the toggle achieves nothing.
+3. **Privacy badge** surfaces the state. Yellow badge + warning text in the popover means "online mode is active, here's exactly where your data goes." No silent mode.
+
+**What the key can do if it leaks:** it's an Admin API key that can read organization usage reports. It can't send messages, can't spend money on its own, can't create workspaces. Still: wipe it via "Clear web data" if you're done, or rotate it from the Claude Console.
+
+**CORS caveat:** Anthropic's docs don't explicitly state that the Admin API supports browser origins. If your browser's preflight fails, the error is surfaced on the Overview card with the exact HTTP response. Fallback: use the same API from a CI job / server-side script, or a Cloudflare Worker proxying the request.
+
+**Files:**
+- `web/src/online/types.ts` — response shapes + LiveUsageSummary rollup
+- `web/src/online/config.ts` — localStorage persistence + key masking
+- `web/src/online/api.ts` — fetch wrapper + paginator + N-day rollup
+- `web/src/pages/OnlineModeSettings.tsx` — toggle, API key input, days-to-fetch
+- `web/src/pages/LiveUsageCard.tsx` — conditional card on Overview
+
 ### Why http://localhost, not file://
 
 The File System Access API requires a secure context. `http://localhost` qualifies everywhere; `file://` has inconsistent support across browsers. That's why the standalone binary runs a tiny HTTP server rather than just opening an HTML file.

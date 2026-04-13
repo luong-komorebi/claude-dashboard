@@ -114,7 +114,9 @@ export function PrivacyBadge({ variant = 'compact' }: Props) {
       >
         <ShieldIcon size={variant === 'full' ? 14 : 12} />
         <span style={{ flex: 1, textAlign: 'left' }}>
-          {safe ? '100% local' : `${externalCount} external requests`}
+          {state === 'safe' ? '100% local'
+            : state === 'online' ? 'Online mode · Anthropic API'
+            : `${externalCount} external requests`}
         </span>
         <span style={{ color, opacity: 0.6, fontSize: variant === 'full' ? 11 : 10 }}>
           {externalCount} req
@@ -128,13 +130,32 @@ export function PrivacyBadge({ variant = 'compact' }: Props) {
       >
         <div style={{ fontSize: 14, fontWeight: 700, color: c.text, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
           <ShieldIcon size={16} />
-          Your data never leaves this tab
+          {state === 'online'
+            ? 'Online mode is active'
+            : 'Your data never leaves this tab'}
         </div>
+
+        {state === 'online' && (
+          <div style={{
+            background: bg, border: `1px solid ${border}`, borderLeft: `3px solid ${c.warning}`,
+            borderRadius: 4, padding: '10px 12px', marginBottom: 12,
+            fontSize: 11, color: c.textMuted, lineHeight: 1.6,
+          }}>
+            <strong style={{ color: c.warning }}>You opted into online mode.</strong>
+            {' '}The dashboard is allowed to call <code style={{
+              background: c.surfaceHover, padding: '1px 6px', borderRadius: 3,
+              fontSize: 10, fontFamily: 'monospace',
+            }}>api.anthropic.com</code> with your Admin API key. No other origin is reachable.
+            Disable it in Config → Settings → Online mode.
+          </div>
+        )}
 
         <div style={{ fontSize: 12, color: c.textMuted, lineHeight: 1.7, marginBottom: 14 }}>
           <ProofLine
             label="CSP enforced"
-            detail="The browser physically blocks every external connection — not a promise, a platform guarantee"
+            detail={state === 'online'
+              ? "Only 'self' + https://api.anthropic.com are whitelisted — everything else is still blocked"
+              : "The browser physically blocks every external connection — not a promise, a platform guarantee"}
           />
           <ProofLine
             label="Works offline"
