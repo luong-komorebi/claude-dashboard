@@ -11,35 +11,26 @@ describe('Projects page', () => {
 
   it('shows project paths', () => {
     render(<Projects data={mockProjects} />)
-    expect(screen.getByText('/Users/alice/myrepo')).toBeInTheDocument()
-    expect(screen.getByText('/Users/alice/other')).toBeInTheDocument()
+    expect(screen.getByText('myrepo')).toBeInTheDocument()
+    expect(screen.getByText('other')).toBeInTheDocument()
   })
 
-  it('memory files hidden by default (collapsed)', () => {
+  it('memory file bodies hidden by default', () => {
     render(<Projects data={mockProjects} />)
-    expect(screen.queryByText('Senior engineer working on dashboard')).not.toBeInTheDocument()
+    // The raw frontmatter line should not be visible until the memory file is expanded
+    expect(screen.queryByText(/type: user/)).not.toBeInTheDocument()
   })
 
-  it('expands project to show memory files on click', async () => {
-    const user = userEvent.setup()
+  it('shows no memory files message for empty projects', () => {
     render(<Projects data={mockProjects} />)
-    await user.click(screen.getByText('/Users/alice/myrepo'))
-    expect(screen.getByText('Senior engineer working on dashboard')).toBeInTheDocument()
-  })
-
-  it('shows no memory files message for empty projects', async () => {
-    const user = userEvent.setup()
-    render(<Projects data={mockProjects} />)
-    await user.click(screen.getByText('/Users/alice/other'))
     expect(screen.getByText('No memory files')).toBeInTheDocument()
   })
 
-  it('collapses project on second click', async () => {
+  it('expands memory file to show raw content on click', async () => {
     const user = userEvent.setup()
     render(<Projects data={mockProjects} />)
-    await user.click(screen.getByText('/Users/alice/myrepo'))
-    await user.click(screen.getByText('/Users/alice/myrepo'))
-    expect(screen.queryByText('Senior engineer working on dashboard')).not.toBeInTheDocument()
+    await user.click(screen.getByText('User role'))
+    expect(screen.getByText(/type: user/)).toBeInTheDocument()
   })
 
   it('handles empty projects list', () => {

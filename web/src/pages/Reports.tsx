@@ -3,6 +3,7 @@ import type { UsageEvent } from '../api'
 import { SectionHeader } from '../components/SectionHeader'
 import { StatCard } from '../components/StatCard'
 import { SearchInput, matchesQuery } from '../components/SearchInput'
+import { InfoHint } from '../components/InfoHint'
 import { c } from '../theme/colors'
 import pricingJson from '../cost/pricing.json'
 import type { Reports, PeriodRow, SessionRow, BlockRow, PricingTable } from '../cost/types'
@@ -126,6 +127,8 @@ export function ReportsPage({ events }: { events: UsageEvent[] }) {
         title="Reports"
         sub="Token usage and estimated cost, computed in WASM from ~/.claude/projects/**/*.jsonl"
       />
+
+      <SubscriptionNotice />
 
       {/* Summary cards */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
