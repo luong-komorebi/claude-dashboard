@@ -99,14 +99,30 @@ export async function ensurePermission(handle: FileSystemDirectoryHandle): Promi
  *
  * Throws DOMException with name 'AbortError' if the user cancels.
  * Throws a plain Error if the picked folder doesn't contain `.claude`.
+ *
+ * IMPORTANT: this function is **not** `async`. `showDirectoryPicker` must be
+ * called synchronously from the click handler that initiated it — wrapping
+ * it in an async function introduces an implicit microtask break between
+ * the gesture and the picker call, which some browsers treat as "outside
+ * the user activation window" and reject with `SecurityError: Must be
+ * handling a user gesture to show a file picker.`
+ *
+ * By returning the promise directly, the compiler can't insert any await
+ * frame before the picker call.
  */
-export async function pickClaudeDir(): Promise<FileSystemDirectoryHandle> {
-  const picked = await window.showDirectoryPicker({
-    id: 'claude-dir',
-    mode: 'read',
-    startIn: 'documents',
-  })
+export function pickClaudeDir(): Promise<FileSystemDirectoryHandle> {
+  return window
+    .showDirectoryPicker({
+      id: 'claude-dir',
+      mode: 'read',
+      startIn: 'documents',
+    })
+    .then(resolveToClaudeFolder)
+}
 
+async function resolveToClaudeFolder(
+  picked: FileSystemDirectoryHandle,
+): Promise<FileSystemDirectoryHandle> {
   // Case 1: user picked .claude directly
   if (picked.name === '.claude') {
     await saveHandle(picked)

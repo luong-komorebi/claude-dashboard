@@ -180,21 +180,33 @@ export default function App() {
 
   // ── Handlers
 
-  const grantAccess = async () => {
-    try {
-      const dir = await pickClaudeDir()
-      setState({ phase: 'loading' })
-      const data = await withParseLock(() => parseInWorker(dir))
-      await saveToOpfs(data)
-      setState({ phase: 'ready', data, dir, stale: false })
-      if (channelRef.current) broadcast(channelRef.current, { type: 'refreshed', cachedAt: Date.now() })
-    } catch (e: unknown) {
-      if (e instanceof Error && e.name === 'AbortError') {
-        setState({ phase: 'pick' })
-      } else {
-        setState({ phase: 'error', message: String(e) })
-      }
-    }
+  // NOTE: grantAccess is intentionally NOT async. `showDirectoryPicker`
+  // must be called synchronously from the click handler to preserve the
+  // user-activation token — wrapping it in an async function introduces a
+  // microtask break that some browsers reject with
+  // `SecurityError: Must be handling a user gesture to show a file picker.`
+  const grantAccess = () => {
+    pickClaudeDir()
+      .then(async dir => {
+        setState({ phase: 'loading' })
+        try {
+          const data = await withParseLock(() => parseInWorker(dir))
+          await saveToOpfs(data)
+          setState({ phase: 'ready', data, dir, stale: false })
+          if (channelRef.current) {
+            broadcast(channelRef.current, { type: 'refreshed', cachedAt: Date.now() })
+          }
+        } catch (e) {
+          setState({ phase: 'error', message: String(e) })
+        }
+      })
+      .catch((e: unknown) => {
+        if (e instanceof Error && e.name === 'AbortError') {
+          setState({ phase: 'pick' })
+        } else {
+          setState({ phase: 'error', message: String(e) })
+        }
+      })
   }
 
   const refresh = async () => {

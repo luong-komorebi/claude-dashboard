@@ -4,9 +4,10 @@ import { SectionHeader } from '../components/SectionHeader'
 import { StatCard } from '../components/StatCard'
 import { c } from '../theme/colors'
 import pricingJson from '../cost/pricing.json'
-import type { Reports, PricingTable, BlockRow, SessionRow } from '../cost/types'
+import type { Reports, PricingTable, BlockRow, SessionRow, Insight } from '../cost/types'
+import { getBudget, projectMonth } from '../cost/budget'
 import {
-  Bar, Line, XAxis, YAxis,
+  Bar, BarChart, Line, XAxis, YAxis,
   Tooltip, ResponsiveContainer, CartesianGrid, ComposedChart,
 } from 'recharts'
 
@@ -19,6 +20,8 @@ const getWasm = () => (wasmPromise ??= import('../wasm-pkg/claude_analytics'))
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
 const fmtCost = (usd: number) => (usd === 0 ? '$0' : `$${usd.toFixed(usd < 10 ? 2 : 0)}`)
+const fmtCostPrecise = (usd: number) =>
+  usd === 0 ? '$0' : usd < 0.01 ? `$${usd.toFixed(4)}` : `$${usd.toFixed(2)}`
 const fmtTokens = (n: number) => {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
@@ -45,7 +48,7 @@ interface TrendMetrics {
 interface Props {
   stats: StatsData
   events: UsageEvent[]
-  onDrillDown: (target: 'Reports') => void
+  onDrillDown: (target: 'Reports' | 'Insights' | 'Sessions' | 'Projects') => void
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -53,6 +56,7 @@ interface Props {
 export function Overview({ stats, events, onDrillDown }: Props) {
   const [reports, setReports] = useState<Reports | null>(null)
   const [trends, setTrends] = useState<TrendMetrics | null>(null)
+  const [insights, setInsights] = useState<Insight[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -63,17 +67,23 @@ export function Overview({ stats, events, onDrillDown }: Props) {
     setError(null)
     getWasm()
       .then(wasm => {
-        const reportsInput = JSON.stringify({
+        // Reports — full aggregation
+        const reportsRaw = wasm.compute_reports(JSON.stringify({
           events, pricing, now_epoch_secs: Math.floor(Date.now() / 1000),
-        })
-        const reportsRaw = wasm.compute_reports(reportsInput)
+        }))
         if (reportsRaw.startsWith('error:')) throw new Error(reportsRaw.slice(6))
 
+        // Trends — streak + moving averages
         const trendsRaw = wasm.compute_trends(JSON.stringify(stats.daily_activity))
         if (trendsRaw.startsWith('error:')) throw new Error(trendsRaw.slice(6))
 
+        // Insights — rule-based observations
+        const insightsRaw = wasm.compute_insights(JSON.stringify({ events, pricing }))
+        if (insightsRaw.startsWith('error:')) throw new Error(insightsRaw.slice(6))
+
         setReports(JSON.parse(reportsRaw) as Reports)
         setTrends(JSON.parse(trendsRaw) as TrendMetrics)
+        setInsights(JSON.parse(insightsRaw) as Insight[])
       })
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false))
@@ -82,7 +92,7 @@ export function Overview({ stats, events, onDrillDown }: Props) {
   if (loading) return <Loading />
   if (error || !reports || !trends) return <ErrorView message={error ?? 'No data'} />
 
-  // ── Derived values
+  // ── Derived values ────────────────────────────────────────────────────────
 
   const activeBlock = reports.blocks.find(b => b.is_active)
   const thisMonthLabel = new Date().toISOString().slice(0, 7)
@@ -93,14 +103,23 @@ export function Overview({ stats, events, onDrillDown }: Props) {
   const monthTokens = thisMonth?.total ?? 0
   const monthChangePct = costChange(lastMonth?.cost_usd ?? 0, monthCost)
 
-  // Combined chart data: last 30 days of cost + message count
-  const chartData = buildChartData(stats, reports, trends)
+  // Budget math (optional)
+  const budget = getBudget()
+  const now = new Date()
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+  const daysElapsed = now.getDate()
+  const projectedMonth = projectMonth(monthCost, daysElapsed, daysInMonth)
+  const budgetOver = budget ? projectedMonth > budget.amount : false
 
-  // Model breakdown (by total tokens)
+  // Charts + breakdowns
+  const chartData = buildChartData(stats, reports)
   const modelBreakdown = buildModelBreakdown(events, pricing)
-
-  // Recent sessions (top 5)
+  const projectBreakdown = buildProjectBreakdown(events, pricing)
+  const hourActivity = buildHourActivity(events)
   const recentSessions = reports.sessions.slice(0, 5)
+
+  // Top 3 insights (alert + warning first)
+  const topInsights = insights.slice(0, 3)
 
   return (
     <div>
@@ -109,8 +128,8 @@ export function Overview({ stats, events, onDrillDown }: Props) {
         sub={`Snapshot of your Claude Code activity · ${stats.date_range ? `${stats.date_range[0]} – ${stats.date_range[1]}` : 'no data yet'}`}
       />
 
-      {/* ── Hero metrics ────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+      {/* ── Hero metrics ──────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
         <StatCard
           label={`Cost · ${thisMonthLabel}`}
           value={fmtCost(monthCost)}
@@ -123,16 +142,34 @@ export function Overview({ stats, events, onDrillDown }: Props) {
           value={fmtTokens(monthTokens)}
           sub={`${thisMonth?.event_count ?? 0} messages`}
         />
-        <StatCard
-          label="Current Streak"
-          value={`${trends.current_streak} day${trends.current_streak === 1 ? '' : 's'}`}
-          sub={`best: ${trends.longest_streak}`}
-          color={c.success}
-        />
+        {budget ? (
+          <BudgetCard budget={budget.amount} mtd={monthCost} projected={projectedMonth} over={budgetOver} />
+        ) : (
+          <StatCard
+            label="Current Streak"
+            value={`${trends.current_streak} day${trends.current_streak === 1 ? '' : 's'}`}
+            sub={`best: ${trends.longest_streak}`}
+            color={c.success}
+          />
+        )}
         <BlockCard block={activeBlock ?? null} />
       </div>
 
-      {/* ── Primary chart: cost line + message bars ─────────────────────── */}
+      {/* ── Insights banner ─────────────────────────────────────────────── */}
+      {topInsights.length > 0 && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(${topInsights.length}, 1fr)`,
+          gap: 10,
+          marginBottom: 20,
+        }}>
+          {topInsights.map((ins, i) => (
+            <InsightCard key={i} insight={ins} onClick={() => onDrillDown('Insights')} />
+          ))}
+        </div>
+      )}
+
+      {/* ── Primary chart ────────────────────────────────────────────────── */}
       <ChartCard title="Last 30 Days">
         <ResponsiveContainer width="100%" height={220}>
           <ComposedChart data={chartData} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
@@ -172,14 +209,25 @@ export function Overview({ stats, events, onDrillDown }: Props) {
         ]} />
       </ChartCard>
 
-      {/* ── Two-column: Model usage + Recent sessions ───────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+      {/* ── Spend breakdowns ─────────────────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
         <ModelUsage breakdown={modelBreakdown} />
-        <RecentSessions rows={recentSessions} onMore={() => onDrillDown('Reports')} />
+        <TopProjects rows={projectBreakdown} onMore={() => onDrillDown('Projects')} />
       </div>
 
-      {/* ── Drill-down cards ────────────────────────────────────────────── */}
+      {/* ── Activity details ─────────────────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+        <RecentSessions rows={recentSessions} onMore={() => onDrillDown('Reports')} />
+        <HourActivity buckets={hourActivity} />
+      </div>
+
+      {/* ── Drill-down cards ─────────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        <DrillCard
+          label="Forecasts & Insights"
+          description="Holt-Winters forecast, anomaly detection, heatmap, what-if simulator"
+          onClick={() => onDrillDown('Insights')}
+        />
         <DrillCard
           label="Detailed Reports"
           description="Daily, Weekly, Monthly, Sessions, and 5-hour Blocks"
@@ -214,10 +262,39 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
   return (
     <div style={{
       background: c.surface, border: `1px solid ${c.border}`, borderRadius: 6,
-      padding: 16, marginBottom: 20,
+      padding: 16, marginBottom: 16,
     }}>
       <div style={{ color: c.accent, fontSize: 12, fontWeight: 600, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>
         {title}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function SectionCard({ title, onMore, moreLabel = 'View all →', children }: {
+  title: string
+  onMore?: () => void
+  moreLabel?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 6, padding: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ color: c.accent, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          {title}
+        </div>
+        {onMore && (
+          <button
+            onClick={onMore}
+            style={{
+              background: 'transparent', border: 'none', color: c.textFaint,
+              fontSize: 11, cursor: 'pointer', padding: 0,
+            }}
+          >
+            {moreLabel}
+          </button>
+        )}
       </div>
       {children}
     </div>
@@ -239,13 +316,7 @@ function Legend({ items }: { items: { color: string; label: string }[] }) {
 
 function BlockCard({ block }: { block: BlockRow | null }) {
   if (!block) {
-    return (
-      <StatCard
-        label="5h Block"
-        value="—"
-        sub="no active block"
-      />
-    )
+    return <StatCard label="5h Block" value="—" sub="no active block" />
   }
   const hours = Math.floor(block.minutes_remaining / 60)
   const mins = block.minutes_remaining % 60
@@ -259,58 +330,148 @@ function BlockCard({ block }: { block: BlockRow | null }) {
   )
 }
 
-function ModelUsage({ breakdown }: { breakdown: { model: string; tokens: number; cost: number; pct: number }[] }) {
-  if (breakdown.length === 0) {
-    return (
-      <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 6, padding: 16 }}>
-        <div style={{ color: c.accent, fontSize: 12, fontWeight: 600, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-          Model Usage
-        </div>
-        <div style={{ color: c.textGhost, fontSize: 12 }}>No usage events yet</div>
-      </div>
-    )
-  }
+function BudgetCard({ budget, mtd, projected, over }: {
+  budget: number; mtd: number; projected: number; over: boolean
+}) {
+  const pct = Math.min((mtd / budget) * 100, 100)
   return (
-    <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 6, padding: 16 }}>
-      <div style={{ color: c.accent, fontSize: 12, fontWeight: 600, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-        Model Usage
+    <div style={{
+      border: `1px solid ${over ? c.error : c.accent}`,
+      borderRadius: 6,
+      padding: '12px 16px',
+      flex: 1,
+      minWidth: 140,
+    }}>
+      <div style={{ color: c.textFaint, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 }}>
+        Budget MTD
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {breakdown.map(row => (
-          <div key={row.model}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, fontSize: 12 }}>
-              <span style={{ color: c.text, fontFamily: 'monospace' }}>{row.model.replace(/^claude-/, '')}</span>
-              <span style={{ color: c.textFaint, fontVariantNumeric: 'tabular-nums' }}>
-                {fmtTokens(row.tokens)} · {fmtCost(row.cost)}
-              </span>
-            </div>
-            <div style={{ background: c.surfaceHover, borderRadius: 2, height: 6 }}>
-              <div style={{ background: c.accent, borderRadius: 2, height: 6, width: `${row.pct}%` }} />
-            </div>
-          </div>
-        ))}
+      <div style={{ color: over ? c.error : c.text, fontSize: 18, fontWeight: 700, margin: '4px 0 2px' }}>
+        {fmtCost(mtd)} <span style={{ color: c.textFaint, fontSize: 12, fontWeight: 400 }}>/ {fmtCost(budget)}</span>
+      </div>
+      <div style={{ background: c.surfaceHover, borderRadius: 2, height: 4, marginBottom: 4 }}>
+        <div style={{ background: over ? c.error : c.success, height: 4, borderRadius: 2, width: `${pct}%` }} />
+      </div>
+      <div style={{ color: c.textGhost, fontSize: 10 }}>
+        projected: {fmtCost(projected)}
       </div>
     </div>
   )
 }
 
+function InsightCard({ insight, onClick }: { insight: Insight; onClick: () => void }) {
+  const color =
+    insight.severity === 'alert' ? c.error :
+    insight.severity === 'warning' ? c.warning :
+    c.accent
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 10,
+        padding: '10px 12px',
+        background: c.surface,
+        border: `1px solid ${c.border}`,
+        borderLeft: `3px solid ${color}`,
+        borderRadius: 4,
+        cursor: 'pointer',
+        textAlign: 'left',
+        fontFamily: 'inherit',
+      }}
+      title="Click to open Insights tab"
+    >
+      <span style={{ fontSize: 16, lineHeight: 1 }}>{insight.icon}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ color: c.text, fontSize: 12, fontWeight: 600, marginBottom: 2 }}>
+          {insight.title}
+        </div>
+        <div style={{
+          color: c.textFaint,
+          fontSize: 11,
+          lineHeight: 1.5,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+        }}>
+          {insight.description}
+        </div>
+      </div>
+    </button>
+  )
+}
+
+function ModelUsage({ breakdown }: {
+  breakdown: { model: string; tokens: number; cost: number; pct: number }[]
+}) {
+  return (
+    <SectionCard title="Model Usage">
+      {breakdown.length === 0 ? (
+        <div style={{ color: c.textGhost, fontSize: 12 }}>No usage events yet</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {breakdown.map(row => (
+            <div key={row.model}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, fontSize: 12 }}>
+                <span style={{ color: c.text, fontFamily: 'monospace' }}>{row.model.replace(/^claude-/, '')}</span>
+                <span style={{ color: c.textFaint, fontVariantNumeric: 'tabular-nums' }}>
+                  {fmtTokens(row.tokens)} · {fmtCost(row.cost)}
+                </span>
+              </div>
+              <div style={{ background: c.surfaceHover, borderRadius: 2, height: 6 }}>
+                <div style={{ background: c.accent, borderRadius: 2, height: 6, width: `${row.pct}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </SectionCard>
+  )
+}
+
+function TopProjects({ rows, onMore }: {
+  rows: { label: string; fullPath: string; cost: number; events: number; pct: number }[]
+  onMore: () => void
+}) {
+  return (
+    <SectionCard title="Top Projects by Cost" onMore={onMore}>
+      {rows.length === 0 ? (
+        <div style={{ color: c.textGhost, fontSize: 12 }}>No usage events yet</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {rows.map(row => (
+            <div key={row.fullPath} title={row.fullPath}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, fontSize: 12 }}>
+                <span style={{
+                  color: c.text,
+                  fontFamily: 'monospace',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '60%',
+                }}>
+                  {row.label}
+                </span>
+                <span style={{ color: c.textFaint, fontVariantNumeric: 'tabular-nums' }}>
+                  {fmtCostPrecise(row.cost)} · {row.events} msgs
+                </span>
+              </div>
+              <div style={{ background: c.surfaceHover, borderRadius: 2, height: 6 }}>
+                <div style={{ background: c.success, borderRadius: 2, height: 6, width: `${row.pct}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </SectionCard>
+  )
+}
+
 function RecentSessions({ rows, onMore }: { rows: SessionRow[]; onMore: () => void }) {
   return (
-    <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 6, padding: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <div style={{ color: c.accent, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-          Recent Sessions
-        </div>
-        <button
-          onClick={onMore}
-          style={{
-            background: 'transparent', border: 'none', color: c.textFaint,
-            fontSize: 11, cursor: 'pointer', padding: 0,
-          }}
-        >
-          View all →
-        </button>
-      </div>
+    <SectionCard title="Recent Sessions" onMore={onMore}>
       {rows.length === 0 ? (
         <div style={{ color: c.textGhost, fontSize: 12 }}>No sessions yet</div>
       ) : (
@@ -334,7 +495,48 @@ function RecentSessions({ rows, onMore }: { rows: SessionRow[]; onMore: () => vo
           ))}
         </div>
       )}
-    </div>
+    </SectionCard>
+  )
+}
+
+function HourActivity({ buckets }: { buckets: { hour: number; events: number }[] }) {
+  const peak = buckets.reduce((p, b) => (b.events > p.events ? b : p), buckets[0])
+  const total = buckets.reduce((s, b) => s + b.events, 0)
+
+  return (
+    <SectionCard title="Activity by Hour (local)">
+      {total === 0 ? (
+        <div style={{ color: c.textGhost, fontSize: 12 }}>No usage events yet</div>
+      ) : (
+        <>
+          <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 8 }}>
+            Peak hour: <strong style={{ color: c.text }}>{peak.hour.toString().padStart(2, '0')}:00</strong>
+            {' · '}
+            {total} events total
+          </div>
+          <ResponsiveContainer width="100%" height={140}>
+            <BarChart data={buckets} margin={{ top: 4, right: 4, bottom: 4, left: -12 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={c.surfaceHover} vertical={false} />
+              <XAxis
+                dataKey="hour"
+                tick={{ fill: c.textGhost, fontSize: 10 }}
+                tickLine={false}
+                interval={3}
+                tickFormatter={(h: number) => `${h}`}
+              />
+              <YAxis hide />
+              <Tooltip
+                contentStyle={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, borderRadius: 4, fontSize: 12 }}
+                labelStyle={{ color: c.textMuted }}
+                labelFormatter={(h) => `${typeof h === 'number' ? h.toString().padStart(2, '0') : h}:00`}
+                formatter={(v: unknown) => [String(v), 'events']}
+              />
+              <Bar dataKey="events" fill={c.accent} radius={[2, 2, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </>
+      )}
+    </SectionCard>
   )
 }
 
@@ -362,7 +564,6 @@ function DrillCard({ label, description, onClick }: { label: string; description
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function prevMonthLabel(label: string): string {
-  // "2026-04" → "2026-03"
   const [y, m] = label.split('-').map(Number)
   const d = new Date(Date.UTC(y, m - 1, 1))
   d.setUTCMonth(d.getUTCMonth() - 1)
@@ -374,7 +575,9 @@ function costChange(prev: number, curr: number): number {
   return ((curr - prev) / prev) * 100
 }
 
-function buildChartData(stats: StatsData, reports: Reports, _trends: TrendMetrics) {
+interface ChartPoint { date: string; messages: number; cost: number }
+
+function buildChartData(stats: StatsData, reports: Reports): ChartPoint[] {
   const last30Days = stats.daily_activity.slice(-30)
   const costByDate = new Map(reports.daily.map(d => [d.label, d.cost_usd]))
   return last30Days.map(d => ({
@@ -388,17 +591,8 @@ function buildModelBreakdown(events: UsageEvent[], pricing: PricingTable) {
   const agg = new Map<string, { tokens: number; cost: number }>()
   for (const ev of events) {
     const cur = agg.get(ev.model) ?? { tokens: 0, cost: 0 }
-    const total = ev.input_tokens + ev.output_tokens + ev.cache_creation_input_tokens + ev.cache_read_input_tokens
-    cur.tokens += total
-
-    const p = pricing[ev.model] ?? pricing[stripDateSuffix(ev.model)]
-    if (p) {
-      cur.cost +=
-        ev.input_tokens * (p.input_cost_per_token ?? 0) +
-        ev.output_tokens * (p.output_cost_per_token ?? 0) +
-        ev.cache_creation_input_tokens * (p.cache_creation_input_token_cost ?? 0) +
-        ev.cache_read_input_tokens * (p.cache_read_input_token_cost ?? 0)
-    }
+    cur.tokens += ev.input_tokens + ev.output_tokens + ev.cache_creation_input_tokens + ev.cache_read_input_tokens
+    cur.cost += computeEventCost(ev, pricing)
     agg.set(ev.model, cur)
   }
   const total = [...agg.values()].reduce((s, v) => s + v.tokens, 0)
@@ -408,11 +602,68 @@ function buildModelBreakdown(events: UsageEvent[], pricing: PricingTable) {
     .slice(0, 5)
 }
 
+function buildProjectBreakdown(events: UsageEvent[], pricing: PricingTable) {
+  const agg = new Map<string, { cost: number; events: number }>()
+  for (const ev of events) {
+    const cur = agg.get(ev.project_id) ?? { cost: 0, events: 0 }
+    cur.cost += computeEventCost(ev, pricing)
+    cur.events += 1
+    agg.set(ev.project_id, cur)
+  }
+  const maxCost = [...agg.values()].reduce((m, v) => Math.max(m, v.cost), 0)
+  return [...agg.entries()]
+    .map(([id, v]) => ({
+      label: shortenProjectId(id),
+      fullPath: decodeProjectId(id),
+      cost: v.cost,
+      events: v.events,
+      pct: maxCost > 0 ? (v.cost / maxCost) * 100 : 0,
+    }))
+    .sort((a, b) => b.cost - a.cost)
+    .slice(0, 5)
+}
+
+/** Decode Claude Code's path-encoded project ID back to a real path. */
+function decodeProjectId(id: string): string {
+  // Claude Code encodes `/Users/alice/myrepo` as `-Users-alice-myrepo`. We can't
+  // reliably recover dashes within real names, but for display the last few
+  // segments are enough.
+  return '/' + id.replace(/^-/, '').split('-').join('/')
+}
+
+/** Short label for project breakdown cards — shows last 2 path segments. */
+function shortenProjectId(id: string): string {
+  const parts = id.replace(/^-/, '').split('-').filter(Boolean)
+  if (parts.length === 0) return id
+  if (parts.length === 1) return parts[0]
+  return `${parts[parts.length - 2]}/${parts[parts.length - 1]}`
+}
+
+function buildHourActivity(events: UsageEvent[]): { hour: number; events: number }[] {
+  const buckets = Array.from({ length: 24 }, (_, hour) => ({ hour, events: 0 }))
+  for (const ev of events) {
+    const ts = new Date(ev.timestamp)
+    const hour = ts.getHours() // local time
+    if (hour >= 0 && hour < 24) {
+      buckets[hour].events += 1
+    }
+  }
+  return buckets
+}
+
+function computeEventCost(ev: UsageEvent, pricing: PricingTable): number {
+  const p = pricing[ev.model] ?? pricing[stripDateSuffix(ev.model)] ?? {}
+  return (
+    ev.input_tokens * (p.input_cost_per_token ?? 0) +
+    ev.output_tokens * (p.output_cost_per_token ?? 0) +
+    ev.cache_creation_input_tokens * (p.cache_creation_input_token_cost ?? 0) +
+    ev.cache_read_input_tokens * (p.cache_read_input_token_cost ?? 0)
+  )
+}
+
 function stripDateSuffix(model: string): string {
   const idx = model.lastIndexOf('-')
   if (idx === -1) return model
   const suffix = model.slice(idx + 1)
-  if (suffix.length === 8 && /^\d+$/.test(suffix)) return model.slice(0, idx)
-  return model
+  return suffix.length === 8 && /^\d+$/.test(suffix) ? model.slice(0, idx) : model
 }
-
