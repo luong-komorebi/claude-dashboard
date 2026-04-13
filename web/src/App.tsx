@@ -315,8 +315,11 @@ export default function App() {
           <div style={{ color: c.accent, fontWeight: 700, fontSize: 22, marginBottom: 6 }}>Claude Dashboard</div>
           <div style={{ color: c.textGhost, fontSize: 13, marginBottom: 28, lineHeight: 1.6 }}>
             Reads your <code style={code}>~/.claude</code> folder directly in the browser.
-            Nothing is uploaded or stored remotely. Pick either <code style={code}>.claude</code> or
-            any parent folder containing it (like your home folder).
+            Nothing is uploaded or stored remotely.<br />
+            <span style={{ color: c.textFaint, fontSize: 12 }}>
+              Pick <strong>your home folder</strong> to unlock account info, or the config directory
+              directly — also works with custom <code style={code}>CLAUDE_CONFIG_DIR</code> (e.g. <code style={code}>~/.claude-work</code>).
+            </span>
           </div>
 
           <button onClick={grantAccess} style={primaryBtn}>
@@ -422,11 +425,11 @@ export default function App() {
           </div>
           <div style={{ color: c.textGhost, fontSize: 13, marginBottom: 24, lineHeight: 1.6 }}>
             Browser security resets folder permissions between visits. Click below
-            to grant this tab read access to <code style={code}>{state.name}</code> again.
+            to grant this tab read access to <code style={code}>{state.handles.configDirName}</code> again.
             Your handle is still remembered — you won't have to navigate through the picker.
           </div>
           <button onClick={reconnect} style={primaryBtn}>
-            Reconnect to {state.name}
+            Reconnect to {state.handles.configDirName}
           </button>
           <div style={{ marginTop: 12 }}>
             <button

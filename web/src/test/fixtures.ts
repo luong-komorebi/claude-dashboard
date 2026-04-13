@@ -132,6 +132,29 @@ export const mockUsageEvents: DashboardData['usage_events'] = [
   },
 ]
 
+export const mockAccount: DashboardData['account'] = {
+  email: 'alice@example.com',
+  accountUuid: '23c63b4f-4567-4ba7-8d82-d3681f7aac1a',
+  organizationUuid: '6f6ccbe7-7d2e-4085-b715-63c13f2f601b',
+  userId: '12345',
+  numStartups: 847,
+  installMethod: 'homebrew',
+  theme: 'dark',
+  autoUpdates: true,
+  hasCompletedOnboarding: true,
+  projectCosts: [
+    {
+      path: '/Users/alice/myrepo',
+      lastCost: 1.42,
+      lastSessionId: 'sess-1',
+      lastApiDurationMs: 3500,
+      lastDurationMs: 42000,
+    },
+  ],
+  mcpServers: ['github', 'notion'],
+  source: '.claude.json',
+}
+
 export const mockDashboard: DashboardData = {
   stats: mockStats,
   usage: mockUsage,
@@ -145,4 +168,5 @@ export const mockDashboard: DashboardData = {
     '-Users-alice-myrepo': '/Users/alice/myrepo',
     '-Users-alice-other': '/Users/alice/other',
   },
+  account: mockAccount,
 }
