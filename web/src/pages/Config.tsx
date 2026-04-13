@@ -13,9 +13,10 @@ type SubTab = typeof SUB_TABS[number]
 interface Props {
   data: DashboardData
   onPickAccountFile: () => void
+  onOnlineModeChange: () => void
 }
 
-export function Config({ data, onPickAccountFile }: Props) {
+export function Config({ data, onPickAccountFile, onOnlineModeChange }: Props) {
   const [sub, setSub] = useState<SubTab>('Account')
 
   return (
@@ -27,7 +28,7 @@ export function Config({ data, onPickAccountFile }: Props) {
       <SubTabBar tabs={SUB_TABS} active={sub} onChange={setSub} iconFor={iconFor} />
 
       {sub === 'Account'  && <Account  account={data.account} events={data.usage_events} projectPaths={data.project_paths} onPickAccountFile={onPickAccountFile} />}
-      {sub === 'Settings' && <Settings data={data.settings} />}
+      {sub === 'Settings' && <Settings data={data.settings} onOnlineModeChange={onOnlineModeChange} />}
       {sub === 'Plugins'  && <Plugins  data={data.plugins} />}
       {sub === 'Customizations' && <Customizations commands={data.commands} skills={data.skills} connectedIdes={data.connectedIdes} />}
     </div>

@@ -89,6 +89,7 @@ export default function App() {
   const [state, setState] = useState<AppState>({ phase: 'checking' })
   const [tab, setTab] = useState<Tab>('Overview')
   const [refreshing, setRefreshing] = useState(false)
+  const [onlineRefetchKey, setOnlineRefetchKey] = useState(0)
   const tabIndexRef = useRef(TABS.indexOf('Overview'))
   const channelRef = useRef<BroadcastChannel | null>(null)
 
@@ -611,11 +612,11 @@ export default function App() {
 
       {/* Main content — view-transition-name is set via .tab-content class */}
       <div className="tab-content" style={{ flex: 1, padding: 24, overflow: 'auto' }}>
-        {tab === 'Overview'  && <Overview  stats={data.stats} events={data.usage_events} projectPaths={data.project_paths} account={data.account} changelog={data.changelog} liveSessions={data.liveSessions} onDrillDown={changeTab} onPickAccountFile={pickAccountFile} />}
+        {tab === 'Overview'  && <Overview  stats={data.stats} events={data.usage_events} projectPaths={data.project_paths} account={data.account} changelog={data.changelog} liveSessions={data.liveSessions} onlineRefetchKey={onlineRefetchKey} onDrillDown={changeTab} onPickAccountFile={pickAccountFile} />}
         {tab === 'Analytics' && <Analytics stats={data.stats} events={data.usage_events} />}
         {tab === 'Projects'  && <Projects  data={data.projects} />}
         {tab === 'Activity'  && <Activity  data={data} />}
-        {tab === 'Config'    && <Config    data={data} onPickAccountFile={pickAccountFile} />}
+        {tab === 'Config'    && <Config    data={data} onPickAccountFile={pickAccountFile} onOnlineModeChange={() => setOnlineRefetchKey(k => k + 1)} />}
       </div>
 
       <SupportButton />

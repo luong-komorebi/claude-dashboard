@@ -5,6 +5,7 @@ import {
   isStoragePersisted,
   requestPersistence,
 } from '../persistence'
+import { getOnlineConfig } from '../online/config'
 import { c } from '../theme/colors'
 
 /**
@@ -48,7 +49,19 @@ export function PrivacyBadge({ variant = 'compact' }: Props) {
   const [storage, setStorage] = useState<{ usageKb: number; quotaMb: number } | null>(null)
   const [persisted, setPersisted] = useState<boolean | null>(null)
   const [persistRequesting, setPersistRequesting] = useState(false)
-  const safe = externalCount === 0
+  const [onlineMode, setOnlineMode] = useState(() => getOnlineConfig().enabled)
+
+  // Re-read online config whenever the external count changes — which happens
+  // on every fetch, so the badge stays in sync with the setting.
+  useEffect(() => {
+    setOnlineMode(getOnlineConfig().enabled)
+  }, [externalCount])
+
+  // Three-state: green (0 external + online off), yellow (online mode on),
+  // red (unexpected external request, e.g. leaked script)
+  const safe = externalCount === 0 && !onlineMode
+  const state: 'safe' | 'online' | 'leak' =
+    safe ? 'safe' : onlineMode ? 'online' : 'leak'
 
   useEffect(() => {
     void getStorageEstimate().then(setStorage)
@@ -65,9 +78,18 @@ export function PrivacyBadge({ variant = 'compact' }: Props) {
     }
   }, [])
 
-  const color = safe ? c.success : c.error
-  const bg = safe ? c.successBg : c.errorBg
-  const border = safe ? c.successBorder : c.errorBorder
+  const color =
+    state === 'safe' ? c.success :
+    state === 'online' ? c.warning :
+    c.error
+  const bg =
+    state === 'safe' ? c.successBg :
+    state === 'online' ? 'rgba(255, 152, 0, 0.08)' :
+    c.errorBg
+  const border =
+    state === 'safe' ? c.successBorder :
+    state === 'online' ? 'rgba(255, 152, 0, 0.3)' :
+    c.errorBorder
 
   return (
     <>

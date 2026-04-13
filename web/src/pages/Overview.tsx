@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { StatsData, UsageEvent, AccountInfo, ChangelogEntry, LiveSession } from '../api'
+import { LiveUsageCard } from './LiveUsageCard'
 import { SectionHeader } from '../components/SectionHeader'
 import { StatCard } from '../components/StatCard'
 import { c } from '../theme/colors'
@@ -54,6 +55,8 @@ interface Props {
   account: AccountInfo | null
   changelog: ChangelogEntry[]
   liveSessions: LiveSession[]
+  /** Bumped whenever online-mode settings change — triggers LiveUsageCard refetch. */
+  onlineRefetchKey: number
   onDrillDown: (target: 'Analytics' | 'Projects' | 'Activity' | 'Config') => void
   /** Callback to trigger the file picker for the account JSON. */
   onPickAccountFile: () => void
@@ -91,7 +94,7 @@ function filterByWindow<T extends { timestamp: string } | { date: string }>(
   })
 }
 
-export function Overview({ stats, events, projectPaths, account, changelog, liveSessions, onDrillDown, onPickAccountFile }: Props) {
+export function Overview({ stats, events, projectPaths, account, changelog, liveSessions, onlineRefetchKey, onDrillDown, onPickAccountFile }: Props) {
   const [window, setWindow] = useState<Window>('all')
   const [reports, setReports] = useState<Reports | null>(null)
   const [trends, setTrends] = useState<TrendMetrics | null>(null)
@@ -270,6 +273,12 @@ export function Overview({ stats, events, projectPaths, account, changelog, live
         projectPaths={projectPaths}
         onPickAccountFile={onPickAccountFile}
         onDrillDown={() => onDrillDown('Config')}
+      />
+
+      {/* ── Live org usage (only when online mode is enabled) ──────────── */}
+      <LiveUsageCard
+        refetchKey={onlineRefetchKey}
+        onOpenSettings={() => onDrillDown('Config')}
       />
 
       {/* ── Live sessions + What's new (conditional) ──────────────────────── */}
