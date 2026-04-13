@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import type { DashboardData } from './api'
 import type { WorkerResponse } from './worker/parser.worker'
-import { pickClaudeDir, getStoredDir, clearHandle } from './fs-access'
+import { pickClaudeDir, getStoredDir, clearHandle, ensurePermission } from './fs-access'
 import { saveToOpfs, loadFromOpfs, clearOpfsCache, cleanupLegacyCache } from './opfs'
 import { createSyncChannel, broadcast, withParseLock, type SyncMessage } from './sync'
 import { exportDashboard } from './export'
@@ -29,7 +29,8 @@ type AppState =
   | { phase: 'checking' }
   | { phase: 'pick' }
   | { phase: 'loading' }
-  | { phase: 'ready'; data: DashboardData; dir: FileSystemDirectoryHandle; stale: boolean; cachedAt?: number }
+  | { phase: 'reconnect'; dir: FileSystemDirectoryHandle; name: string }
+  | { phase: 'ready'; data: DashboardData; dir: FileSystemDirectoryHandle; stale: boolean; cachedAt?: number; needsPermission?: boolean }
   | { phase: 'error'; message: string }
 
 // ─── Worker helper ────────────────────────────────────────────────────────────
@@ -91,13 +92,37 @@ export default function App() {
       }
     }
 
-    getStoredDir().then(async dir => {
-      if (!dir) {
+    getStoredDir().then(async stored => {
+      if (!stored) {
         if (!cancelled) setState({ phase: 'pick' })
         return
       }
 
-      // Show stale data from OPFS right away (if available)
+      const { handle: dir, permission } = stored
+
+      // Permission not granted yet — we can't call requestPermission() here
+      // because it requires a user gesture. Instead, show cached data (if
+      // any) with a "needs reconnect" flag, or jump straight to a reconnect
+      // screen if there's no cache.
+      if (permission !== 'granted') {
+        const cached = await loadFromOpfs()
+        if (cancelled) return
+        if (cached) {
+          setState({
+            phase: 'ready',
+            data: cached.data,
+            dir,
+            stale: true,
+            cachedAt: cached.cachedAt,
+            needsPermission: true,
+          })
+        } else {
+          setState({ phase: 'reconnect', dir, name: dir.name })
+        }
+        return
+      }
+
+      // Permission granted — stale-while-revalidate as usual
       const cached = await loadFromOpfs()
       if (cached && !cancelled) {
         setState({ phase: 'ready', data: cached.data, dir, stale: true, cachedAt: cached.cachedAt })
@@ -105,7 +130,6 @@ export default function App() {
         setState({ phase: 'loading' })
       }
 
-      // Re-parse in Worker, inside a cross-tab parse lock
       try {
         const data = await withParseLock(() => parseInWorker(dir))
         if (!cancelled) {
@@ -162,6 +186,13 @@ export default function App() {
     if (state.phase !== 'ready' || refreshing) return
     setRefreshing(true)
     try {
+      // Escalate permission if needed — this call is inside a click handler,
+      // so the browser allows requestPermission() to prompt the user.
+      const ok = await ensurePermission(state.dir)
+      if (!ok) {
+        setRefreshing(false)
+        return
+      }
       const data = await withParseLock(() => parseInWorker(state.dir))
       await saveToOpfs(data)
       setState({ phase: 'ready', data, dir: state.dir, stale: false })
@@ -170,6 +201,21 @@ export default function App() {
       setState({ phase: 'error', message: String(e) })
     } finally {
       setRefreshing(false)
+    }
+  }
+
+  const reconnect = async () => {
+    if (state.phase !== 'reconnect') return
+    const ok = await ensurePermission(state.dir)
+    if (!ok) return // user denied — stay on reconnect screen
+    setState({ phase: 'loading' })
+    try {
+      const data = await withParseLock(() => parseInWorker(state.dir))
+      await saveToOpfs(data)
+      setState({ phase: 'ready', data, dir: state.dir, stale: false })
+      if (channelRef.current) broadcast(channelRef.current, { type: 'refreshed', cachedAt: Date.now() })
+    } catch (e) {
+      setState({ phase: 'error', message: String(e) })
     }
   }
 
@@ -273,6 +319,37 @@ export default function App() {
     )
   }
 
+  if (state.phase === 'reconnect') {
+    return (
+      <div style={centered}>
+        <div style={{ textAlign: 'center', maxWidth: 440 }}>
+          <div style={{ color: c.accent, fontWeight: 700, fontSize: 20, marginBottom: 8 }}>
+            Reconnect your folder
+          </div>
+          <div style={{ color: c.textGhost, fontSize: 13, marginBottom: 24, lineHeight: 1.6 }}>
+            Browser security resets folder permissions between visits. Click below
+            to grant this tab read access to <code style={code}>{state.name}</code> again.
+            Your handle is still remembered — you won't have to navigate through the picker.
+          </div>
+          <button onClick={reconnect} style={primaryBtn}>
+            Reconnect to {state.name}
+          </button>
+          <div style={{ marginTop: 12 }}>
+            <button
+              onClick={reset}
+              style={{
+                background: 'transparent', border: 'none', color: c.textFaint,
+                fontSize: 12, cursor: 'pointer', textDecoration: 'underline',
+              }}
+            >
+              Or pick a different folder
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (state.phase === 'error') {
     return (
       <div style={centered}>
@@ -286,7 +363,7 @@ export default function App() {
 
   // ── Ready: full dashboard
 
-  const { data, stale, cachedAt } = state
+  const { data, stale, cachedAt, needsPermission } = state
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: c.bg, color: c.text, fontFamily: 'system-ui, sans-serif' }}>
       {/* Sidebar */}
@@ -308,7 +385,21 @@ export default function App() {
 
         <div style={{ position: 'absolute', bottom: 16, left: 0, right: 0, padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <PrivacyBadge />
-          {stale && (
+          {needsPermission && (
+            <div style={{
+              color: c.warning,
+              fontSize: 10,
+              textAlign: 'center',
+              padding: '4px 6px',
+              background: c.errorBg,
+              border: `1px solid ${c.errorBorder}`,
+              borderRadius: 4,
+              lineHeight: 1.3,
+            }}>
+              Permission expired — click Refresh to reconnect
+            </div>
+          )}
+          {stale && !needsPermission && (
             <div style={{ color: c.textGhost, fontSize: 10, textAlign: 'center', marginBottom: 2 }}>
               {refreshing ? '↻ Updating…' : cachedAt ? `cached ${new Date(cachedAt).toLocaleTimeString()}` : 'stale'}
             </div>

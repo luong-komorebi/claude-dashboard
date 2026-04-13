@@ -52,17 +52,41 @@ export async function clearHandle(): Promise<void> {
   })
 }
 
+export interface StoredDirResult {
+  handle: FileSystemDirectoryHandle
+  /** 'granted' | 'prompt' | 'denied' — call ensurePermission() on anything non-granted, but only inside a user gesture. */
+  permission: PermissionState
+}
+
 /**
- * Returns the stored handle if read permission is still granted.
- * Attempts a silent re-request (will fail if no user gesture is present).
+ * Returns the stored handle along with its current read-permission state.
+ * Does NOT call requestPermission() — that would throw SecurityError on page
+ * load because it requires a user gesture. Callers must invoke
+ * ensurePermission() from a click handler when they need to escalate.
  */
-export async function getStoredDir(): Promise<FileSystemDirectoryHandle | null> {
+export async function getStoredDir(): Promise<StoredDirResult | null> {
   const handle = await loadHandle()
   if (!handle) return null
-  const perm = await handle.queryPermission({ mode: 'read' })
-  if (perm === 'granted') return handle
-  const req = await handle.requestPermission({ mode: 'read' })
-  return req === 'granted' ? handle : null
+  const permission = await handle.queryPermission({ mode: 'read' })
+  return { handle, permission }
+}
+
+/**
+ * Request read permission on a previously-stored handle. MUST be called from
+ * inside a user-gesture handler (click, keypress, etc.) — otherwise the
+ * browser throws SecurityError.
+ *
+ * Returns true iff the user granted or had already granted access.
+ */
+export async function ensurePermission(handle: FileSystemDirectoryHandle): Promise<boolean> {
+  const current = await handle.queryPermission({ mode: 'read' })
+  if (current === 'granted') return true
+  try {
+    const result = await handle.requestPermission({ mode: 'read' })
+    return result === 'granted'
+  } catch {
+    return false
+  }
 }
 
 /**
