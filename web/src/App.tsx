@@ -14,6 +14,7 @@ import { Sessions } from './pages/Sessions'
 import { Settings } from './pages/Settings'
 import { Trends } from './pages/Trends'
 import { PrivacyBadge } from './components/PrivacyBadge'
+import { ThemeSwitcher } from './components/ThemeSwitcher'
 import { c } from './theme/colors'
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
@@ -222,7 +223,8 @@ export default function App() {
           <div style={{ color: c.accent, fontWeight: 700, fontSize: 22, marginBottom: 6 }}>Claude Dashboard</div>
           <div style={{ color: c.textGhost, fontSize: 13, marginBottom: 28, lineHeight: 1.6 }}>
             Reads your <code style={code}>~/.claude</code> folder directly in the browser.
-            Nothing is uploaded or stored remotely.
+            Nothing is uploaded or stored remotely. Pick either <code style={code}>.claude</code> or
+            any parent folder containing it (like your home folder).
           </div>
 
           <button onClick={grantAccess} style={primaryBtn}>
@@ -332,6 +334,7 @@ export default function App() {
           }}>
             Change folder
           </button>
+          <ThemeSwitcher />
         </div>
       </div>
 

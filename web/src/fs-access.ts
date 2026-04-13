@@ -67,10 +67,38 @@ export async function getStoredDir(): Promise<FileSystemDirectoryHandle | null> 
 
 /**
  * Open the directory picker, save the handle, and return it.
+ *
+ * Accepts either the `.claude` folder itself OR any parent that contains it
+ * (e.g. the user's home folder). Picking a parent is often easier because
+ * home/Documents are visible in the file picker sidebar, whereas `.claude`
+ * is hidden by default on macOS/Linux.
+ *
  * Throws DOMException with name 'AbortError' if the user cancels.
+ * Throws a plain Error if the picked folder doesn't contain `.claude`.
  */
 export async function pickClaudeDir(): Promise<FileSystemDirectoryHandle> {
-  const handle = await window.showDirectoryPicker({ mode: 'read', startIn: 'documents' })
-  await saveHandle(handle)
-  return handle
+  const picked = await window.showDirectoryPicker({
+    id: 'claude-dir',
+    mode: 'read',
+    startIn: 'documents',
+  })
+
+  // Case 1: user picked .claude directly
+  if (picked.name === '.claude') {
+    await saveHandle(picked)
+    return picked
+  }
+
+  // Case 2: user picked a parent containing .claude — grab the subhandle
+  try {
+    const sub = await picked.getDirectoryHandle('.claude')
+    await saveHandle(sub)
+    return sub
+  } catch {
+    throw new Error(
+      `"${picked.name}" doesn't contain a .claude folder. Pick either ` +
+      `the .claude folder directly, or a parent folder that contains it ` +
+      `(like your home folder).`,
+    )
+  }
 }
