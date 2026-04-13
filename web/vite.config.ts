@@ -9,9 +9,14 @@ import { VitePWA } from 'vite-plugin-pwa'
 const base = process.env.VITE_BASE_PATH ?? '/'
 
 // Content Security Policy — production only.
-// `connect-src 'self'` makes it physically impossible for this app to send
-// data to any external server. Same-origin fetches (service worker, assets)
-// still work. Blocked at the browser platform level, not by a JS check.
+// `connect-src` allows only two destinations:
+//   1. `'self'`                   — normal same-origin fetches (SW, assets)
+//   2. `https://api.anthropic.com` — Claude Code Analytics Admin API, used
+//                                    ONLY when the user explicitly enables
+//                                    online mode in Config → Settings.
+// Even with the destination whitelisted, the app-layer fetch wrapper still
+// refuses to call the API unless online mode is on. This is two layers of
+// defense: CSP (platform-level whitelist) + application gating.
 function cspPlugin(): PluginOption {
   const csp = [
     "default-src 'self'",
@@ -19,7 +24,7 @@ function cspPlugin(): PluginOption {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
-    "connect-src 'self'",
+    "connect-src 'self' https://api.anthropic.com",
     "worker-src 'self' blob:",
     "manifest-src 'self'",
     "object-src 'none'",

@@ -4,8 +4,14 @@ import { StatCard } from '../components/StatCard'
 import { SectionHeader } from '../components/SectionHeader'
 import { SearchInput, matchesQuery } from '../components/SearchInput'
 import { c } from '../theme/colors'
+import { OnlineModeSettings } from './OnlineModeSettings'
 
-export function Settings({ data }: { data: SettingsData }) {
+interface Props {
+  data: SettingsData
+  onOnlineModeChange?: () => void
+}
+
+export function Settings({ data, onOnlineModeChange }: Props) {
   const [query, setQuery] = useState('')
 
   const filteredHistory = useMemo(() => {
@@ -17,7 +23,9 @@ export function Settings({ data }: { data: SettingsData }) {
 
   return (
     <div>
-      <SectionHeader title="Settings" sub="Permissions, effort level, and recent command history" />
+      <SectionHeader title="Settings" sub="Permissions, effort level, online mode, and recent command history" />
+
+      <OnlineModeSettings onChange={() => onOnlineModeChange?.()} />
 
       {/* Compact stat row */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
