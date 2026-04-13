@@ -34,6 +34,66 @@ Three ways to run without internet:
 - No telemetry, no analytics, no third-party scripts
 - All parsing + analytics runs locally in a Web Worker + Rust/WASM
 - Persistent storage API enabled on request so the browser never evicts your folder handle
+- OAuth tokens, MCP server credentials, and any other secrets in `.claude.json` are stripped **inside the Web Worker** before reaching the main thread — they never touch the UI or get persisted to OPFS
+
+## What gets read (and what doesn't)
+
+Quick map of `~/.claude` so you know exactly what the dashboard sees.
+
+### Currently parsed
+
+| Path | Used for | Notes |
+|---|---|---|
+| `stats-cache.json` | Daily activity rollups (messages, sessions, tool calls) | StatsData |
+| `usage-data/facets/*.json` | Session summaries (outcome, helpfulness, brief) | UsageData |
+| `projects/<id>/*.jsonl` | Per-session event logs → token usage, cost, real `cwd` | UsageEvents + Reports |
+| `projects/<id>/memory/*.md` | Project memory files | Projects tree |
+| `plugins/installed_plugins.json` + `settings.json#enabledPlugins` | Plugin registry | Plugins page |
+| `settings.json` | Allowed tools, effort level, always-thinking | Settings page |
+| `history.jsonl` | Recent CLI command history | Settings page |
+| `todos/<sessionId>-agent-<id>.json` | Per-session todo lists | Activity → Todos |
+| `plans/*.md` | Implementation plans | Activity → Todos |
+| `~/.claude.json` *(sibling, not inside)* | **Account info, per-project lastCost, MCP server names, numStartups** | Account tab — requires picking the file via the in-app "Pick .claude.json" button |
+
+### Redacted before reaching the UI
+
+These exist in the source files but are stripped inside the Web Worker and never persisted:
+
+- `oauthAccount.accessToken` — Anthropic OAuth access token
+- `oauthAccount.refreshToken` — refresh token
+- `mcpServers.*.env` — environment variables passed to MCP servers (often API keys)
+- `mcpServers.*.headers` — HTTP headers (auth tokens for SSE/HTTP MCP transports)
+- Any other `apiKey` / `token` / `password` field nested under `mcpServers`
+
+The Account tab shows MCP server **names only**.
+
+### Not yet parsed (gaps)
+
+| Path | What it contains | Why not yet |
+|---|---|---|
+| `cache/changelog.md` | Claude Code's own version-by-version changelog | Could surface as "What's new" card — easy add |
+| `commands/*.md` | User-defined slash commands (YAML frontmatter + body) | Could become "Custom commands" tab — easy add |
+| `skills/*/SKILL.md` | User-defined skills with metadata + scripts | Could become "Custom skills" tab — easy add |
+| `file-history/<sessionId>/<hash>@v<n>` | Versioned snapshots of every file Claude has edited (~37 MB on this machine) | Big payload; useful for "files most touched" stat or undo-trail viewer |
+| `sessions/<pid>.json` | Currently-running Claude Code processes (pid, cwd, entrypoint) | Could power a "live sessions" widget — small add |
+| `ide/<pid>.lock` | Connected IDE extensions (VS Code, JetBrains) with workspace folders | Tokens must be redacted; useful for "connected editors" widget |
+| `statsig/statsig.cached.evaluations.*` | Feature flags + cached gates Claude Code evaluates against | Fun "experiments you're in" view — small add |
+| `telemetry/1p_failed_events.*.json` | Failed telemetry events Claude Code couldn't ship to Anthropic (~15 MB) | Mostly noise — error reports, performance metrics. Low value. |
+| `shell-snapshots/*.sh` | Zsh/bash startup snapshots captured per session (~241 MB on this machine) | Huge, low signal. Skipped. |
+| `debug/<sessionId>.txt` | Plain-text debug logs per session | Useful for troubleshooting; not actionable for a usage dashboard |
+| `tasks/<uuid>/` | Task-related metadata | Empty on most installs |
+| `backups/`, `session-env/` | Backup files, per-session env overrides | Generally empty or low value |
+
+### What's NOT in `~/.claude` at all
+
+These would require Anthropic's API (online mode, not yet implemented):
+
+- **Subscription tier** (Pro / Max / API)
+- **Live quota / 5-hour block remaining tokens**
+- **Billing reset times**
+- **Actual invoiced amount** (we show *API-equivalent* cost computed from token counts × LiteLLM pricing — that's hypothetical, not what subscription users actually pay)
+
+Online mode is on the roadmap as an opt-in toggle that would relax the CSP to allow `api.anthropic.com` and surface the live numbers — see [DEVELOPMENT.md](./DEVELOPMENT.md) for the proposed architecture.
 
 ## Support
 

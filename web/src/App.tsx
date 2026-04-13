@@ -492,7 +492,24 @@ export default function App() {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: c.bg, color: c.text, fontFamily: 'system-ui, sans-serif' }}>
       {/* Sidebar */}
-      <div style={{ width: 180, background: c.surface, borderRight: `1px solid ${c.borderSoft}`, padding: '16px 0', flexShrink: 0, position: 'relative' }}>
+      <div style={{
+        width: 180,
+        background: c.surface,
+        borderRight: `1px solid ${c.borderSoft}`,
+        padding: '16px 0',
+        flexShrink: 0,
+        // Sticky sidebar pinned to the viewport top so it stays visible while
+        // the main content scrolls. `alignSelf: 'flex-start'` is required on
+        // flex children for sticky to behave (otherwise the row stretches it
+        // to the parent's height and there's nothing to stick against).
+        position: 'sticky',
+        top: 0,
+        alignSelf: 'flex-start',
+        height: '100vh',
+        overflowY: 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+      }}>
         <div style={{ padding: '0 16px 20px', color: c.accent, fontWeight: 700, fontSize: 14, letterSpacing: 0.5 }}>
           Claude Dashboard
         </div>
@@ -508,7 +525,9 @@ export default function App() {
           </button>
         ))}
 
-        <div style={{ position: 'absolute', bottom: 16, left: 0, right: 0, padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {/* Spacer pushes the footer to the bottom of the sticky sidebar */}
+        <div style={{ flex: 1 }} />
+        <div style={{ padding: '0 12px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
           {canInstall && !isStandalone && (
             <button
               onClick={install}
