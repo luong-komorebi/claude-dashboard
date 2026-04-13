@@ -86,7 +86,7 @@ function filterByWindow<T extends { timestamp: string } | { date: string }>(
 }
 
 export function Overview({ stats, events, projectPaths, onDrillDown }: Props) {
-  const [window, setWindow] = useState<Window>('30d')
+  const [window, setWindow] = useState<Window>('all')
   const [reports, setReports] = useState<Reports | null>(null)
   const [trends, setTrends] = useState<TrendMetrics | null>(null)
   const [insights, setInsights] = useState<Insight[]>([])

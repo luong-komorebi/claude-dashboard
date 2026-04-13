@@ -74,6 +74,21 @@ export default function App() {
   const online = useOnlineStatus()
   const isStandalone = useIsStandalone()
 
+  // OS detection for the "copy path" helper — macOS/Linux use ~/.claude,
+  // Windows uses %USERPROFILE%\.claude which Explorer's address bar expands.
+  const platform = detectPlatform()
+  const copyTargetPath = platform === 'windows' ? '%USERPROFILE%\\.claude' : '~/.claude'
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
+  const copyPath = async () => {
+    try {
+      await navigator.clipboard.writeText(copyTargetPath)
+      setCopyStatus('copied')
+    } catch {
+      setCopyStatus('failed')
+    }
+    setTimeout(() => setCopyStatus('idle'), 2000)
+  }
+
   // ── Startup: cleanup legacy cache, try persistent storage, open sync channel, load data
   useEffect(() => {
     let cancelled = false
@@ -332,36 +347,59 @@ export default function App() {
           )}
 
           <div style={{ marginTop: 20, textAlign: 'left', background: c.surface, border: `1px solid ${c.borderSoft}`, borderRadius: 8, padding: 20 }}>
-            <div style={{ color: c.textDim, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 14 }}>How to navigate to the folder</div>
-            {[
-              { os: 'macOS', steps: [
-                <>Click <strong style={{ color: c.text }}>Open ~/.claude folder</strong> above</>,
-                <>In the picker, press <kbd style={kbd}>⌘ Shift .</kbd> to reveal hidden folders</>,
-                <>Navigate to your <strong style={{ color: c.text }}>home folder</strong> (click your username in the sidebar)</>,
-                <>Select the <code style={code}>.claude</code> folder and click <strong style={{ color: c.text }}>Open</strong></>,
-              ]},
-              { os: 'Windows', steps: [
-                <>Click <strong style={{ color: c.text }}>Open ~/.claude folder</strong> above</>,
-                <>In the address bar, type <code style={code}>%USERPROFILE%\.claude</code> and press Enter</>,
-                <>Click <strong style={{ color: c.text }}>Select Folder</strong></>,
-              ]},
-            ].map(({ os, steps }) => (
-              <div key={os} style={{ marginBottom: 16 }}>
-                <div style={{ color: c.accent, fontSize: 12, fontWeight: 600, marginBottom: 8 }}>{os}</div>
-                <ol style={{ margin: 0, padding: '0 0 0 18px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {steps.map((step, i) => (
-                    <li key={i} style={{ color: c.textFaint, fontSize: 13, lineHeight: 1.5 }}>{step}</li>
-                  ))}
-                </ol>
-              </div>
-            ))}
-            <div style={{ marginTop: 8, padding: '10px 12px', background: c.bg, borderRadius: 6, borderLeft: `2px solid ${c.border}` }}>
-              <span style={{ color: c.textGhost, fontSize: 12 }}>Typically: </span>
-              <code style={{ ...code, fontSize: 12 }}>/Users/&lt;name&gt;/.claude</code>
-              <span style={{ color: c.textGhost, fontSize: 12 }}> on macOS, </span>
-              <code style={{ ...code, fontSize: 12 }}>C:\Users\&lt;name&gt;\.claude</code>
-              <span style={{ color: c.textGhost, fontSize: 12 }}> on Windows</span>
+            <div style={{ color: c.textDim, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 14 }}>
+              Fastest way to pick the hidden folder
             </div>
+
+            {/* One-click copy of the platform-appropriate path */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '10px 12px', marginBottom: 14,
+              background: c.bg, border: `1px solid ${c.border}`, borderRadius: 6,
+            }}>
+              <code style={{ ...code, fontSize: 12, flex: 1 }}>{copyTargetPath}</code>
+              <button
+                onClick={copyPath}
+                style={{
+                  background: copyStatus === 'copied' ? c.success : c.accent,
+                  color: c.accentFg, border: 'none',
+                  borderRadius: 3, padding: '5px 12px', fontSize: 11,
+                  fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+                  transition: 'background 120ms',
+                }}
+              >
+                {copyStatus === 'copied' ? '✓ Copied' :
+                 copyStatus === 'failed' ? 'Failed — copy manually' :
+                 'Copy path'}
+              </button>
+            </div>
+
+            {platform === 'macos' && (
+              <ol style={instructionList}>
+                <li style={instructionItem}>Click <strong style={{ color: c.text }}>Open ~/.claude folder</strong> above</li>
+                <li style={instructionItem}>In the picker, press <kbd style={kbd}>⇧ ⌘ G</kbd> to open <strong style={{ color: c.text }}>Go To Folder</strong></li>
+                <li style={instructionItem}>Paste (<kbd style={kbd}>⌘ V</kbd>) and press <kbd style={kbd}>Return</kbd></li>
+                <li style={instructionItem}>Click <strong style={{ color: c.text }}>Open</strong></li>
+              </ol>
+            )}
+
+            {platform === 'windows' && (
+              <ol style={instructionList}>
+                <li style={instructionItem}>Click <strong style={{ color: c.text }}>Open ~/.claude folder</strong> above</li>
+                <li style={instructionItem}>Click the <strong style={{ color: c.text }}>address bar</strong> at the top of the picker</li>
+                <li style={instructionItem}>Paste (<kbd style={kbd}>Ctrl V</kbd>) and press <kbd style={kbd}>Enter</kbd></li>
+                <li style={instructionItem}>Click <strong style={{ color: c.text }}>Select Folder</strong></li>
+              </ol>
+            )}
+
+            {(platform === 'linux' || platform === 'other') && (
+              <ol style={instructionList}>
+                <li style={instructionItem}>Click <strong style={{ color: c.text }}>Open ~/.claude folder</strong> above</li>
+                <li style={instructionItem}>Press <kbd style={kbd}>Ctrl L</kbd> in the picker to type a path, or enable hidden files with <kbd style={kbd}>Ctrl H</kbd></li>
+                <li style={instructionItem}>Paste the path above and press <kbd style={kbd}>Enter</kbd></li>
+                <li style={instructionItem}>Click <strong style={{ color: c.text }}>Open</strong></li>
+              </ol>
+            )}
           </div>
         </div>
       </div>
@@ -522,6 +560,19 @@ export default function App() {
 
 // ─── Shared styles ────────────────────────────────────────────────────────────
 
+type Platform = 'macos' | 'windows' | 'linux' | 'other'
+
+function detectPlatform(): Platform {
+  if (typeof navigator === 'undefined') return 'other'
+  // Prefer userAgentData when available (Chromium)
+  const ua = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform
+  const s = (ua ?? navigator.userAgent ?? '').toLowerCase()
+  if (s.includes('mac') || s.includes('darwin')) return 'macos'
+  if (s.includes('win')) return 'windows'
+  if (s.includes('linux')) return 'linux'
+  return 'other'
+}
+
 const centered: React.CSSProperties = {
   display: 'flex', alignItems: 'center', justifyContent: 'center',
   minHeight: '100vh', background: c.bg, color: c.text,
@@ -539,4 +590,11 @@ const code: React.CSSProperties = {
 const kbd: React.CSSProperties = {
   background: c.surfaceHover, padding: '1px 6px', borderRadius: 3,
   fontSize: 11, fontFamily: 'monospace', border: `1px solid ${c.border}`,
+}
+const instructionList: React.CSSProperties = {
+  margin: 0, padding: '0 0 0 18px',
+  display: 'flex', flexDirection: 'column', gap: 6,
+}
+const instructionItem: React.CSSProperties = {
+  color: c.textFaint, fontSize: 13, lineHeight: 1.6,
 }
