@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.1.2](https://github.com/luong-komorebi/claude-dashboard/compare/v0.1.1...v0.1.2) (2026-04-13)
+
+
+### Features
+
+* add one-line installer script for claude-dashboard ([4693d96](https://github.com/luong-komorebi/claude-dashboard/commit/4693d96c71cf552d787427aef16cf4bba630bad5))
+* add online mode feature with Anthropic API integration and enhance privacy badge ([6f7d80e](https://github.com/luong-komorebi/claude-dashboard/commit/6f7d80ee65bb73489bc16dee19da1623251dff33))
+* enhance dashboard with changelog, live sessions, and customizations support ([a65246e](https://github.com/luong-komorebi/claude-dashboard/commit/a65246e4dc0217b148b65524b36ddab484895148))
+* enhance release workflows to handle tag creation and binary builds more effectively ([1776107](https://github.com/luong-komorebi/claude-dashboard/commit/1776107a15b5c5c358d099b7d2619507feca83b8))
+* implement FOUC prevention by moving theme initialization to external script ([828e4de](https://github.com/luong-komorebi/claude-dashboard/commit/828e4de8264d3e6fc34d314f8a4c9c76f85187ab))
+* implement hash-based routing with view transitions and enhance sub-tab navigation across pages ([7ad1a43](https://github.com/luong-komorebi/claude-dashboard/commit/7ad1a43d82d3cf0f2743347bc74ce2d87b66f617))
+* implement online mode settings and integrate Claude Code Analytics Admin API ([7a1cb9c](https://github.com/luong-komorebi/claude-dashboard/commit/7a1cb9ca2657f91040c0a5cd95f3b0b01ccd1b3b))
+* integrate live usage card and online mode settings across components ([7cf9dc1](https://github.com/luong-komorebi/claude-dashboard/commit/7cf9dc16615db68bc4bdb90e5a8aa3c3e91be38a))
+* update cache versioning and enhance data migration for DashboardData structure ([b15bd91](https://github.com/luong-komorebi/claude-dashboard/commit/b15bd918ce5e12a174e915123718ec7747e97f41))
+* update dependencies for React, TypeScript, and related packages ([a3a7396](https://github.com/luong-komorebi/claude-dashboard/commit/a3a7396858a254dd814a334121d604f1cdc484ee))
+* update offline installation instructions for standalone binary ([ab36ec6](https://github.com/luong-komorebi/claude-dashboard/commit/ab36ec6d3e90d1505966b02630af733d2aa1a082))
+
 ## [0.1.1](https://github.com/luong-komorebi/claude-dashboard/compare/v0.1.0...v0.1.1) (2026-04-13)
 
 
