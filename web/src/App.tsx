@@ -14,6 +14,7 @@ import { Sessions } from './pages/Sessions'
 import { Settings } from './pages/Settings'
 import { Trends } from './pages/Trends'
 import { PrivacyBadge } from './components/PrivacyBadge'
+import { c } from './theme/colors'
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
 
@@ -207,7 +208,7 @@ export default function App() {
   if (state.phase === 'checking' || state.phase === 'loading') {
     return (
       <div style={centered}>
-        <div style={{ color: '#7c6af7', fontSize: 14 }}>
+        <div style={{ color: c.accent, fontSize: 14 }}>
           {state.phase === 'checking' ? 'Checking permissions…' : 'Loading ~/.claude…'}
         </div>
       </div>
@@ -218,8 +219,8 @@ export default function App() {
     return (
       <div style={centered}>
         <div style={{ textAlign: 'center', maxWidth: 480 }}>
-          <div style={{ color: '#7c6af7', fontWeight: 700, fontSize: 22, marginBottom: 6 }}>Claude Dashboard</div>
-          <div style={{ color: '#555', fontSize: 13, marginBottom: 28, lineHeight: 1.6 }}>
+          <div style={{ color: c.accent, fontWeight: 700, fontSize: 22, marginBottom: 6 }}>Claude Dashboard</div>
+          <div style={{ color: c.textGhost, fontSize: 13, marginBottom: 28, lineHeight: 1.6 }}>
             Reads your <code style={code}>~/.claude</code> folder directly in the browser.
             Nothing is uploaded or stored remotely.
           </div>
@@ -232,36 +233,36 @@ export default function App() {
             <PrivacyBadge variant="full" />
           </div>
 
-          <div style={{ marginTop: 20, textAlign: 'left', background: '#111', border: '1px solid #222', borderRadius: 8, padding: 20 }}>
-            <div style={{ color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 14 }}>How to navigate to the folder</div>
+          <div style={{ marginTop: 20, textAlign: 'left', background: c.surface, border: `1px solid ${c.borderSoft}`, borderRadius: 8, padding: 20 }}>
+            <div style={{ color: c.textDim, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 14 }}>How to navigate to the folder</div>
             {[
               { os: 'macOS', steps: [
-                <>Click <strong style={{ color: '#e8e8e8' }}>Open ~/.claude folder</strong> above</>,
+                <>Click <strong style={{ color: c.text }}>Open ~/.claude folder</strong> above</>,
                 <>In the picker, press <kbd style={kbd}>⌘ Shift .</kbd> to reveal hidden folders</>,
-                <>Navigate to your <strong style={{ color: '#e8e8e8' }}>home folder</strong> (click your username in the sidebar)</>,
-                <>Select the <code style={code}>.claude</code> folder and click <strong style={{ color: '#e8e8e8' }}>Open</strong></>,
+                <>Navigate to your <strong style={{ color: c.text }}>home folder</strong> (click your username in the sidebar)</>,
+                <>Select the <code style={code}>.claude</code> folder and click <strong style={{ color: c.text }}>Open</strong></>,
               ]},
               { os: 'Windows', steps: [
-                <>Click <strong style={{ color: '#e8e8e8' }}>Open ~/.claude folder</strong> above</>,
+                <>Click <strong style={{ color: c.text }}>Open ~/.claude folder</strong> above</>,
                 <>In the address bar, type <code style={code}>%USERPROFILE%\.claude</code> and press Enter</>,
-                <>Click <strong style={{ color: '#e8e8e8' }}>Select Folder</strong></>,
+                <>Click <strong style={{ color: c.text }}>Select Folder</strong></>,
               ]},
             ].map(({ os, steps }) => (
               <div key={os} style={{ marginBottom: 16 }}>
-                <div style={{ color: '#7c6af7', fontSize: 12, fontWeight: 600, marginBottom: 8 }}>{os}</div>
+                <div style={{ color: c.accent, fontSize: 12, fontWeight: 600, marginBottom: 8 }}>{os}</div>
                 <ol style={{ margin: 0, padding: '0 0 0 18px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {steps.map((step, i) => (
-                    <li key={i} style={{ color: '#666', fontSize: 13, lineHeight: 1.5 }}>{step}</li>
+                    <li key={i} style={{ color: c.textFaint, fontSize: 13, lineHeight: 1.5 }}>{step}</li>
                   ))}
                 </ol>
               </div>
             ))}
-            <div style={{ marginTop: 8, padding: '10px 12px', background: '#0d0d0d', borderRadius: 6, borderLeft: '2px solid #333' }}>
-              <span style={{ color: '#555', fontSize: 12 }}>Typically: </span>
+            <div style={{ marginTop: 8, padding: '10px 12px', background: c.bg, borderRadius: 6, borderLeft: `2px solid ${c.border}` }}>
+              <span style={{ color: c.textGhost, fontSize: 12 }}>Typically: </span>
               <code style={{ ...code, fontSize: 12 }}>/Users/&lt;name&gt;/.claude</code>
-              <span style={{ color: '#555', fontSize: 12 }}> on macOS, </span>
+              <span style={{ color: c.textGhost, fontSize: 12 }}> on macOS, </span>
               <code style={{ ...code, fontSize: 12 }}>C:\Users\&lt;name&gt;\.claude</code>
-              <span style={{ color: '#555', fontSize: 12 }}> on Windows</span>
+              <span style={{ color: c.textGhost, fontSize: 12 }}> on Windows</span>
             </div>
           </div>
         </div>
@@ -273,7 +274,7 @@ export default function App() {
     return (
       <div style={centered}>
         <div style={{ textAlign: 'center', maxWidth: 400 }}>
-          <div style={{ color: '#f44336', marginBottom: 12 }}>{state.message}</div>
+          <div style={{ color: c.error, marginBottom: 12 }}>{state.message}</div>
           <button onClick={() => setState({ phase: 'pick' })} style={primaryBtn}>Try again</button>
         </div>
       </div>
@@ -284,18 +285,18 @@ export default function App() {
 
   const { data, stale, cachedAt } = state
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#0d0d0d', color: '#e8e8e8', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: c.bg, color: c.text, fontFamily: 'system-ui, sans-serif' }}>
       {/* Sidebar */}
-      <div style={{ width: 180, background: '#111', borderRight: '1px solid #222', padding: '16px 0', flexShrink: 0, position: 'relative' }}>
-        <div style={{ padding: '0 16px 20px', color: '#7c6af7', fontWeight: 700, fontSize: 14, letterSpacing: 0.5 }}>
+      <div style={{ width: 180, background: c.surface, borderRight: `1px solid ${c.borderSoft}`, padding: '16px 0', flexShrink: 0, position: 'relative' }}>
+        <div style={{ padding: '0 16px 20px', color: c.accent, fontWeight: 700, fontSize: 14, letterSpacing: 0.5 }}>
           Claude Dashboard
         </div>
         {TABS.map(t => (
           <button key={t} onClick={() => changeTab(t)} style={{
             display: 'block', width: '100%', textAlign: 'left',
-            padding: '9px 16px', background: tab === t ? '#1e1e1e' : 'transparent',
-            color: tab === t ? '#e8e8e8' : '#666', border: 'none',
-            borderLeft: tab === t ? '2px solid #7c6af7' : '2px solid transparent',
+            padding: '9px 16px', background: tab === t ? c.surfaceHover : 'transparent',
+            color: tab === t ? c.text : c.textFaint, border: 'none',
+            borderLeft: tab === t ? `2px solid ${c.accent}` : '2px solid transparent',
             cursor: 'pointer', fontSize: 13, fontWeight: tab === t ? 600 : 400,
           }}>
             {t}
@@ -305,28 +306,28 @@ export default function App() {
         <div style={{ position: 'absolute', bottom: 16, left: 0, right: 0, padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <PrivacyBadge />
           {stale && (
-            <div style={{ color: '#555', fontSize: 10, textAlign: 'center', marginBottom: 2 }}>
+            <div style={{ color: c.textGhost, fontSize: 10, textAlign: 'center', marginBottom: 2 }}>
               {refreshing ? '↻ Updating…' : cachedAt ? `cached ${new Date(cachedAt).toLocaleTimeString()}` : 'stale'}
             </div>
           )}
           <button onClick={refresh} disabled={refreshing} style={{
-            background: '#1e1e1e', border: '1px solid #333',
-            color: refreshing ? '#555' : '#aaa', borderRadius: 4,
+            background: c.surfaceHover, border: `1px solid ${c.border}`,
+            color: refreshing ? c.textGhost : c.textMuted, borderRadius: 4,
             padding: '6px 12px', cursor: refreshing ? 'default' : 'pointer',
             fontSize: 12, width: '100%',
           }}>
             {refreshing ? 'Refreshing…' : '↻ Refresh'}
           </button>
           <button onClick={exportData} style={{
-            background: 'transparent', border: '1px solid #2a2a2a',
-            color: exportStatus ? '#4caf50' : '#666', borderRadius: 4,
+            background: 'transparent', border: `1px solid ${c.borderSoft}`,
+            color: exportStatus ? c.success : c.textFaint, borderRadius: 4,
             padding: '5px 12px', cursor: 'pointer', fontSize: 11, width: '100%',
           }}>
             {exportStatus ?? '↓ Export JSON'}
           </button>
           <button onClick={reset} style={{
-            background: 'transparent', border: '1px solid #2a2a2a',
-            color: '#444', borderRadius: 4, padding: '5px 12px',
+            background: 'transparent', border: `1px solid ${c.borderSoft}`,
+            color: c.textDisabled, borderRadius: 4, padding: '5px 12px',
             cursor: 'pointer', fontSize: 11, width: '100%',
           }}>
             Change folder
@@ -353,19 +354,19 @@ export default function App() {
 
 const centered: React.CSSProperties = {
   display: 'flex', alignItems: 'center', justifyContent: 'center',
-  minHeight: '100vh', background: '#0d0d0d', color: '#e8e8e8',
+  minHeight: '100vh', background: c.bg, color: c.text,
   fontFamily: 'system-ui, sans-serif',
 }
 const primaryBtn: React.CSSProperties = {
-  background: '#7c6af7', color: '#fff', border: 'none',
+  background: c.accent, color: c.accentFg, border: 'none',
   borderRadius: 6, padding: '10px 20px', fontSize: 14,
   cursor: 'pointer', fontWeight: 600,
 }
 const code: React.CSSProperties = {
-  background: '#1e1e1e', padding: '1px 6px', borderRadius: 3,
+  background: c.surfaceHover, padding: '1px 6px', borderRadius: 3,
   fontSize: 13, fontFamily: 'monospace',
 }
 const kbd: React.CSSProperties = {
-  background: '#1e1e1e', padding: '1px 6px', borderRadius: 3,
-  fontSize: 11, fontFamily: 'monospace', border: '1px solid #333',
+  background: c.surfaceHover, padding: '1px 6px', borderRadius: 3,
+  fontSize: 11, fontFamily: 'monospace', border: `1px solid ${c.border}`,
 }

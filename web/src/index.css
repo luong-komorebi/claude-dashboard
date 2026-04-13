@@ -1,9 +1,229 @@
 *, *::before, *::after { box-sizing: border-box; }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Themes — each block redefines the same 20-ish CSS custom properties.
+   Swap themes by setting `data-theme="..."` on <html>.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Default Dark (original) ─────────────────────────────────────────────── */
+:root,
+[data-theme="default"] {
+  --bg:             #0d0d0d;
+  --surface:        #111111;
+  --surface-alt:    #1a1a1a;
+  --surface-hover:  #1e1e1e;
+
+  --border-soft:    #222222;
+  --border:         #333333;
+  --border-strong:  #444444;
+
+  --text:           #e8e8e8;
+  --text-muted:     #aaaaaa;
+  --text-dim:       #888888;
+  --text-faint:     #666666;
+  --text-ghost:     #555555;
+  --text-disabled:  #444444;
+
+  --accent:         #7c6af7;
+  --accent-fg:      #ffffff;
+
+  --success:        #4caf50;
+  --success-bg:     rgba(76, 175, 80, 0.08);
+  --success-border: rgba(76, 175, 80, 0.3);
+  --warning:        #ff9800;
+  --error:          #f44336;
+  --error-bg:       rgba(244, 67, 54, 0.08);
+  --error-border:   rgba(244, 67, 54, 0.3);
+}
+
+/* ── Catppuccin Mocha ────────────────────────────────────────────────────── */
+[data-theme="catppuccin-mocha"] {
+  --bg:             #1e1e2e;
+  --surface:        #181825;
+  --surface-alt:    #11111b;
+  --surface-hover:  #313244;
+
+  --border-soft:    #313244;
+  --border:         #45475a;
+  --border-strong:  #585b70;
+
+  --text:           #cdd6f4;
+  --text-muted:     #bac2de;
+  --text-dim:       #a6adc8;
+  --text-faint:     #9399b2;
+  --text-ghost:     #7f849c;
+  --text-disabled:  #585b70;
+
+  --accent:         #cba6f7;
+  --accent-fg:      #1e1e2e;
+
+  --success:        #a6e3a1;
+  --success-bg:     rgba(166, 227, 161, 0.1);
+  --success-border: rgba(166, 227, 161, 0.35);
+  --warning:        #f9e2af;
+  --error:          #f38ba8;
+  --error-bg:       rgba(243, 139, 168, 0.1);
+  --error-border:   rgba(243, 139, 168, 0.35);
+}
+
+/* ── Catppuccin Latte (light) ────────────────────────────────────────────── */
+[data-theme="catppuccin-latte"] {
+  --bg:             #eff1f5;
+  --surface:        #e6e9ef;
+  --surface-alt:    #dce0e8;
+  --surface-hover:  #ccd0da;
+
+  --border-soft:    #ccd0da;
+  --border:         #bcc0cc;
+  --border-strong:  #acb0be;
+
+  --text:           #4c4f69;
+  --text-muted:     #5c5f77;
+  --text-dim:       #6c6f85;
+  --text-faint:     #7c7f93;
+  --text-ghost:     #8c8fa1;
+  --text-disabled:  #9ca0b0;
+
+  --accent:         #8839ef;
+  --accent-fg:      #ffffff;
+
+  --success:        #40a02b;
+  --success-bg:     rgba(64, 160, 43, 0.1);
+  --success-border: rgba(64, 160, 43, 0.35);
+  --warning:        #df8e1d;
+  --error:          #d20f39;
+  --error-bg:       rgba(210, 15, 57, 0.08);
+  --error-border:   rgba(210, 15, 57, 0.3);
+}
+
+/* ── Gruvbox Dark ────────────────────────────────────────────────────────── */
+[data-theme="gruvbox-dark"] {
+  --bg:             #282828;
+  --surface:        #32302f;
+  --surface-alt:    #3c3836;
+  --surface-hover:  #504945;
+
+  --border-soft:    #3c3836;
+  --border:         #504945;
+  --border-strong:  #665c54;
+
+  --text:           #ebdbb2;
+  --text-muted:     #d5c4a1;
+  --text-dim:       #bdae93;
+  --text-faint:     #a89984;
+  --text-ghost:     #928374;
+  --text-disabled:  #7c6f64;
+
+  --accent:         #fabd2f;
+  --accent-fg:      #282828;
+
+  --success:        #b8bb26;
+  --success-bg:     rgba(184, 187, 38, 0.1);
+  --success-border: rgba(184, 187, 38, 0.35);
+  --warning:        #fe8019;
+  --error:          #fb4934;
+  --error-bg:       rgba(251, 73, 52, 0.08);
+  --error-border:   rgba(251, 73, 52, 0.3);
+}
+
+/* ── Gruvbox Light ───────────────────────────────────────────────────────── */
+[data-theme="gruvbox-light"] {
+  --bg:             #fbf1c7;
+  --surface:        #f2e5bc;
+  --surface-alt:    #ebdbb2;
+  --surface-hover:  #d5c4a1;
+
+  --border-soft:    #ebdbb2;
+  --border:         #d5c4a1;
+  --border-strong:  #bdae93;
+
+  --text:           #3c3836;
+  --text-muted:     #504945;
+  --text-dim:       #665c54;
+  --text-faint:     #7c6f64;
+  --text-ghost:     #928374;
+  --text-disabled:  #a89984;
+
+  --accent:         #b57614;
+  --accent-fg:      #fbf1c7;
+
+  --success:        #79740e;
+  --success-bg:     rgba(121, 116, 14, 0.1);
+  --success-border: rgba(121, 116, 14, 0.35);
+  --warning:        #af3a03;
+  --error:          #9d0006;
+  --error-bg:       rgba(157, 0, 6, 0.08);
+  --error-border:   rgba(157, 0, 6, 0.3);
+}
+
+/* ── Tokyo Night ─────────────────────────────────────────────────────────── */
+[data-theme="tokyo-night"] {
+  --bg:             #1a1b26;
+  --surface:        #16161e;
+  --surface-alt:    #1f2335;
+  --surface-hover:  #24283b;
+
+  --border-soft:    #24283b;
+  --border:         #3b4261;
+  --border-strong:  #565f89;
+
+  --text:           #c0caf5;
+  --text-muted:     #a9b1d6;
+  --text-dim:       #9aa5ce;
+  --text-faint:     #787c99;
+  --text-ghost:     #565f89;
+  --text-disabled:  #414868;
+
+  --accent:         #bb9af7;
+  --accent-fg:      #1a1b26;
+
+  --success:        #9ece6a;
+  --success-bg:     rgba(158, 206, 106, 0.1);
+  --success-border: rgba(158, 206, 106, 0.35);
+  --warning:        #e0af68;
+  --error:          #f7768e;
+  --error-bg:       rgba(247, 118, 142, 0.08);
+  --error-border:   rgba(247, 118, 142, 0.3);
+}
+
+/* ── Rosé Pine ───────────────────────────────────────────────────────────── */
+[data-theme="rose-pine"] {
+  --bg:             #191724;
+  --surface:        #1f1d2e;
+  --surface-alt:    #26233a;
+  --surface-hover:  #403d52;
+
+  --border-soft:    #26233a;
+  --border:         #403d52;
+  --border-strong:  #524f67;
+
+  --text:           #e0def4;
+  --text-muted:     #908caa;
+  --text-dim:       #8580a8;
+  --text-faint:     #6e6a86;
+  --text-ghost:     #56526e;
+  --text-disabled:  #403d52;
+
+  --accent:         #c4a7e7;
+  --accent-fg:      #191724;
+
+  --success:        #9ccfd8;
+  --success-bg:     rgba(156, 207, 216, 0.1);
+  --success-border: rgba(156, 207, 216, 0.35);
+  --warning:        #f6c177;
+  --error:          #eb6f92;
+  --error-bg:       rgba(235, 111, 146, 0.08);
+  --error-border:   rgba(235, 111, 146, 0.3);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Base styles
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 body {
   margin: 0;
-  background: #0d0d0d;
-  color: #e8e8e8;
+  background: var(--bg);
+  color: var(--text);
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
@@ -16,38 +236,16 @@ body {
 
 button { font-family: inherit; }
 
-/* ─── View Transitions ───────────────────────────────────────────────────────
-   The main content pane gets view-transition-name: tab-content (set inline).
-   --vt-dir is set to 1 (going right) or -1 (going left) before the transition.
-   ──────────────────────────────────────────────────────────────────────────── */
+/* ── View Transitions ────────────────────────────────────────────────────── */
 
-.tab-content {
-  view-transition-name: tab-content;
-}
+.tab-content { view-transition-name: tab-content; }
 
 @keyframes vt-slide-out {
-  to {
-    opacity: 0;
-    transform: translateX(calc(var(--vt-dir, 1) * -24px));
-  }
+  to { opacity: 0; transform: translateX(calc(var(--vt-dir, 1) * -24px)); }
 }
-
 @keyframes vt-slide-in {
-  from {
-    opacity: 0;
-    transform: translateX(calc(var(--vt-dir, 1) * 24px));
-  }
+  from { opacity: 0; transform: translateX(calc(var(--vt-dir, 1) * 24px)); }
 }
-
-::view-transition-old(tab-content) {
-  animation: vt-slide-out 160ms ease both;
-}
-
-::view-transition-new(tab-content) {
-  animation: vt-slide-in 160ms ease both;
-}
-
-/* Dark background behind the transitioning element */
-::view-transition-group(tab-content) {
-  animation-duration: 160ms;
-}
+::view-transition-old(tab-content) { animation: vt-slide-out 160ms ease both; }
+::view-transition-new(tab-content) { animation: vt-slide-in 160ms ease both; }
+::view-transition-group(tab-content) { animation-duration: 160ms; }

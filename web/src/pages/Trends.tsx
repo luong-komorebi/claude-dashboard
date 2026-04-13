@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { StatsData } from '../api'
 import { SectionHeader } from '../components/SectionHeader'
 import { StatCard } from '../components/StatCard'
+import { c } from '../theme/colors'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis,
   Tooltip, ResponsiveContainer, CartesianGrid,
@@ -35,7 +36,7 @@ interface TrendMetrics {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const trendColor = { up: '#4caf50', down: '#f44336', stable: '#7c6af7' } as const
+const trendColor = { up: c.success, down: c.error, stable: c.accent } as const
 const trendArrow = { up: '↑', down: '↓', stable: '→' } as const
 
 function shortDate(iso: string) {
@@ -66,7 +67,7 @@ export function Trends({ data }: { data: StatsData }) {
     return (
       <div>
         <SectionHeader title="Trends" sub="WASM-powered analytics on daily activity" />
-        <div style={{ color: '#555', fontSize: 13 }}>Loading WASM analytics…</div>
+        <div style={{ color: c.textGhost, fontSize: 13 }}>Loading WASM analytics…</div>
       </div>
     )
   }
@@ -75,7 +76,7 @@ export function Trends({ data }: { data: StatsData }) {
     return (
       <div>
         <SectionHeader title="Trends" sub="WASM-powered analytics on daily activity" />
-        <div style={{ color: '#f44336', fontSize: 13 }}>{error ?? 'No data'}</div>
+        <div style={{ color: c.error, fontSize: 13 }}>{error ?? 'No data'}</div>
       </div>
     )
   }
@@ -122,33 +123,33 @@ export function Trends({ data }: { data: StatsData }) {
 
       {/* Moving-average line chart */}
       {chartData.length > 0 && (
-        <div style={{ background: '#111', border: '1px solid #333', borderRadius: 6, padding: 16, marginBottom: 16 }}>
-          <div style={{ color: '#7c6af7', fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
+        <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 6, padding: 16, marginBottom: 16 }}>
+          <div style={{ color: c.accent, fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
             Daily Messages + Moving Averages
           </div>
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={chartData} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e1e1e" />
-              <XAxis dataKey="date" tick={{ fill: '#555', fontSize: 11 }} tickLine={false} />
-              <YAxis tick={{ fill: '#555', fontSize: 11 }} tickLine={false} axisLine={false} width={36} />
+              <CartesianGrid strokeDasharray="3 3" stroke={c.surfaceHover} />
+              <XAxis dataKey="date" tick={{ fill: c.textGhost, fontSize: 11 }} tickLine={false} />
+              <YAxis tick={{ fill: c.textGhost, fontSize: 11 }} tickLine={false} axisLine={false} width={36} />
               <Tooltip
-                contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 4, fontSize: 12 }}
-                labelStyle={{ color: '#aaa' }}
+                contentStyle={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, borderRadius: 4, fontSize: 12 }}
+                labelStyle={{ color: c.textMuted }}
               />
-              <Line type="monotone" dataKey="messages" stroke="#333" dot={false} strokeWidth={1} name="Messages" />
-              <Line type="monotone" dataKey="avg7" stroke="#7c6af7" dot={false} strokeWidth={2} name="7-day avg" connectNulls />
-              <Line type="monotone" dataKey="avg30" stroke="#4caf50" dot={false} strokeWidth={2} name="30-day avg" connectNulls strokeDasharray="4 2" />
+              <Line type="monotone" dataKey="messages" stroke={c.border} dot={false} strokeWidth={1} name="Messages" />
+              <Line type="monotone" dataKey="avg7" stroke={c.accent} dot={false} strokeWidth={2} name="7-day avg" connectNulls />
+              <Line type="monotone" dataKey="avg30" stroke={c.success} dot={false} strokeWidth={2} name="30-day avg" connectNulls strokeDasharray="4 2" />
             </LineChart>
           </ResponsiveContainer>
           <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
             {[
-              { color: '#333', label: 'Daily' },
-              { color: '#7c6af7', label: '7-day avg' },
-              { color: '#4caf50', label: '30-day avg' },
+              { color: c.border, label: 'Daily' },
+              { color: c.accent, label: '7-day avg' },
+              { color: c.success, label: '30-day avg' },
             ].map(({ color, label }) => (
               <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div style={{ width: 16, height: 2, background: color }} />
-                <span style={{ color: '#555', fontSize: 11 }}>{label}</span>
+                <span style={{ color: c.textGhost, fontSize: 11 }}>{label}</span>
               </div>
             ))}
           </div>
@@ -157,28 +158,28 @@ export function Trends({ data }: { data: StatsData }) {
 
       {/* Weekly bar chart */}
       {metrics.weekly_totals.length > 0 && (
-        <div style={{ background: '#111', border: '1px solid #333', borderRadius: 6, padding: 16 }}>
-          <div style={{ color: '#4caf50', fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
+        <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 6, padding: 16 }}>
+          <div style={{ color: c.success, fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
             Weekly Message Volume
           </div>
           <ResponsiveContainer width="100%" height={160}>
             <BarChart data={metrics.weekly_totals} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e1e1e" vertical={false} />
-              <XAxis dataKey="week_start" tickFormatter={shortDate} tick={{ fill: '#555', fontSize: 11 }} tickLine={false} />
-              <YAxis tick={{ fill: '#555', fontSize: 11 }} tickLine={false} axisLine={false} width={36} />
+              <CartesianGrid strokeDasharray="3 3" stroke={c.surfaceHover} vertical={false} />
+              <XAxis dataKey="week_start" tickFormatter={shortDate} tick={{ fill: c.textGhost, fontSize: 11 }} tickLine={false} />
+              <YAxis tick={{ fill: c.textGhost, fontSize: 11 }} tickLine={false} axisLine={false} width={36} />
               <Tooltip
-                contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 4, fontSize: 12 }}
-                labelStyle={{ color: '#aaa' }}
+                contentStyle={{ background: c.surfaceAlt, border: `1px solid ${c.border}`, borderRadius: 4, fontSize: 12 }}
+                labelStyle={{ color: c.textMuted }}
                 labelFormatter={(label) => typeof label === 'string' ? shortDate(label) : label}
               />
-              <Bar dataKey="messages" fill="#7c6af7" radius={[2, 2, 0, 0]} name="Messages" />
+              <Bar dataKey="messages" fill={c.accent} radius={[2, 2, 0, 0]} name="Messages" />
             </BarChart>
           </ResponsiveContainer>
         </div>
       )}
 
       {data.daily_activity.length === 0 && (
-        <div style={{ color: '#555', fontSize: 13 }}>No daily activity data found in stats-cache.json.</div>
+        <div style={{ color: c.textGhost, fontSize: 13 }}>No daily activity data found in stats-cache.json.</div>
       )}
     </div>
   )

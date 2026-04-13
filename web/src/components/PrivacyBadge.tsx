@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from 'react'
 import { getStorageEstimate } from '../opfs'
+import { c } from '../theme/colors'
 
 /**
  * Counts "external" resource loads since page navigation.
@@ -46,9 +47,9 @@ export function PrivacyBadge({ variant = 'compact' }: Props) {
     void getStorageEstimate().then(setStorage)
   }, [externalCount])
 
-  const color = safe ? '#4caf50' : '#f44336'
-  const bg = safe ? 'rgba(76, 175, 80, 0.08)' : 'rgba(244, 67, 54, 0.08)'
-  const border = safe ? 'rgba(76, 175, 80, 0.3)' : 'rgba(244, 67, 54, 0.3)'
+  const color = safe ? c.success : c.error
+  const bg = safe ? c.successBg : c.errorBg
+  const border = safe ? c.successBorder : c.errorBorder
 
   return (
     <>
@@ -85,12 +86,12 @@ export function PrivacyBadge({ variant = 'compact' }: Props) {
         popover="auto"
         style={popoverStyle}
       >
-        <div style={{ fontSize: 14, fontWeight: 700, color: '#e8e8e8', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: c.text, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
           <ShieldIcon size={16} />
           Your data never leaves this tab
         </div>
 
-        <div style={{ fontSize: 12, color: '#aaa', lineHeight: 1.7, marginBottom: 14 }}>
+        <div style={{ fontSize: 12, color: c.textMuted, lineHeight: 1.7, marginBottom: 14 }}>
           <ProofLine
             label="CSP enforced"
             detail="The browser physically blocks every external connection — not a promise, a platform guarantee"
@@ -111,7 +112,7 @@ export function PrivacyBadge({ variant = 'compact' }: Props) {
 
         <div style={{
           fontSize: 11,
-          color: safe ? '#4caf50' : '#f44336',
+          color: safe ? c.success : c.error,
           background: bg,
           border: `1px solid ${border}`,
           borderRadius: 4,
@@ -122,16 +123,16 @@ export function PrivacyBadge({ variant = 'compact' }: Props) {
           Live count: <strong>{externalCount}</strong> external requests this session
         </div>
 
-        <div style={{ fontSize: 11, color: '#666', lineHeight: 1.6, marginBottom: 10 }}>
-          <strong style={{ color: '#888' }}>Verify it yourself:</strong> open DevTools → Network tab,
+        <div style={{ fontSize: 11, color: c.textFaint, lineHeight: 1.6, marginBottom: 10 }}>
+          <strong style={{ color: c.textDim }}>Verify it yourself:</strong> open DevTools → Network tab,
           filter to "Fetch/XHR", refresh the page. The only requests you'll see are to this same origin.
         </div>
 
         {storage && (
-          <div style={{ fontSize: 10, color: '#555', paddingTop: 10, borderTop: '1px solid #222' }}>
-            Local storage: <strong style={{ color: '#888' }}>{storage.usageKb} KB</strong>
+          <div style={{ fontSize: 10, color: c.textGhost, paddingTop: 10, borderTop: `1px solid ${c.borderSoft}` }}>
+            Local storage: <strong style={{ color: c.textDim }}>{storage.usageKb} KB</strong>
             {storage.quotaMb > 0 && <> of {storage.quotaMb} MB available</>}
-            <span style={{ marginLeft: 6, color: '#444' }}>(OPFS, never sent anywhere)</span>
+            <span style={{ marginLeft: 6, color: c.textDisabled }}>(OPFS, never sent anywhere)</span>
           </div>
         )}
       </div>
@@ -158,8 +159,8 @@ function ShieldIcon({ size = 12 }: { size?: number }) {
 function ProofLine({ label, detail }: { label: string; detail: string }) {
   return (
     <div style={{ marginBottom: 8 }}>
-      <div style={{ color: '#4caf50', fontWeight: 600, fontSize: 12 }}>✓ {label}</div>
-      <div style={{ color: '#777', fontSize: 11, marginLeft: 16, marginTop: 1 }}>{detail}</div>
+      <div style={{ color: c.success, fontWeight: 600, fontSize: 12 }}>✓ {label}</div>
+      <div style={{ color: c.textFaint, fontSize: 11, marginLeft: 16, marginTop: 1 }}>{detail}</div>
     </div>
   )
 }
@@ -173,12 +174,12 @@ const popoverStyle: React.CSSProperties = {
   inset: 'unset',
   margin: 0,
   padding: 20,
-  background: '#0d0d0d',
-  border: '1px solid #333',
+  background: c.bg,
+  border: `1px solid ${c.border}`,
   borderRadius: 8,
   boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6)',
   maxWidth: 420,
   width: '90vw',
-  color: '#e8e8e8',
+  color: c.text,
   fontFamily: 'system-ui, sans-serif',
 }

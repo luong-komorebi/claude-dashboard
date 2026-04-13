@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Project, MemoryFile } from '../api'
 import { StatCard } from '../components/StatCard'
 import { SectionHeader } from '../components/SectionHeader'
+import { c } from '../theme/colors'
 
 function MemoryFileView({ file }: { file: MemoryFile }) {
   const [open, setOpen] = useState(false)
@@ -10,18 +11,18 @@ function MemoryFileView({ file }: { file: MemoryFile }) {
   const desc = extractFrontmatterField(file.content, 'description')
 
   return (
-    <div style={{ borderTop: '1px solid #1e1e1e', padding: '8px 0 8px 16px' }}>
+    <div style={{ borderTop: `1px solid ${c.surfaceHover}`, padding: '8px 0 8px 16px' }}>
       <div
         style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
         onClick={() => setOpen(o => !o)}
       >
-        <span style={{ color: '#555', fontSize: 11 }}>{open ? '▼' : '▶'}</span>
-        <span style={{ color: '#7c6af7', fontSize: 13, fontWeight: 500 }}>{name}</span>
-        {type && <span style={{ color: '#555', fontSize: 11, background: '#1e1e1e', borderRadius: 3, padding: '1px 6px' }}>{type}</span>}
-        {desc && <span style={{ color: '#555', fontSize: 12, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{desc}</span>}
+        <span style={{ color: c.textGhost, fontSize: 11 }}>{open ? '▼' : '▶'}</span>
+        <span style={{ color: c.accent, fontSize: 13, fontWeight: 500 }}>{name}</span>
+        {type && <span style={{ color: c.textGhost, fontSize: 11, background: c.surfaceHover, borderRadius: 3, padding: '1px 6px' }}>{type}</span>}
+        {desc && <span style={{ color: c.textGhost, fontSize: 12, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{desc}</span>}
       </div>
       {open && (
-        <pre style={{ margin: '8px 0 0 16px', color: '#aaa', fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+        <pre style={{ margin: '8px 0 0 16px', color: c.textMuted, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
           {file.content}
         </pre>
       )}
@@ -49,21 +50,21 @@ export function Projects({ data }: { data: Project[] }) {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {data.map(p => (
-          <div key={p.id} style={{ background: '#111', border: '1px solid #333', borderRadius: 6, overflow: 'hidden' }}>
+          <div key={p.id} style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 6, overflow: 'hidden' }}>
             <div
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', cursor: 'pointer' }}
               onClick={() => toggle(p.id)}
             >
-              <span style={{ color: '#7c6af7', fontSize: 13 }}>{expanded.has(p.id) ? '▼' : '▶'}</span>
-              <span style={{ color: '#e8e8e8', fontWeight: 600, fontSize: 13 }}>{p.path}</span>
-              <span style={{ color: '#555', fontSize: 12, marginLeft: 'auto' }}>
+              <span style={{ color: c.accent, fontSize: 13 }}>{expanded.has(p.id) ? '▼' : '▶'}</span>
+              <span style={{ color: c.text, fontWeight: 600, fontSize: 13 }}>{p.path}</span>
+              <span style={{ color: c.textGhost, fontSize: 12, marginLeft: 'auto' }}>
                 {p.memory_files.length} memory file{p.memory_files.length !== 1 ? 's' : ''}
               </span>
             </div>
             {expanded.has(p.id) && (
               <div>
                 {p.memory_files.length === 0
-                  ? <div style={{ padding: '8px 32px', color: '#555', fontSize: 13 }}>No memory files</div>
+                  ? <div style={{ padding: '8px 32px', color: c.textGhost, fontSize: 13 }}>No memory files</div>
                   : p.memory_files.map(mf => <MemoryFileView key={mf.name} file={mf} />)
                 }
               </div>

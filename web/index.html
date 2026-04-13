@@ -4,7 +4,16 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>web</title>
+    <title>Claude Dashboard</title>
+    <!-- FOUC prevention: apply stored theme before CSS loads. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('claude-dashboard:theme');
+          if (t) document.documentElement.setAttribute('data-theme', t);
+        } catch (_) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

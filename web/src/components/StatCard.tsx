@@ -1,3 +1,5 @@
+import { c } from '../theme/colors'
+
 interface Props {
   label: string
   value: string | number
@@ -9,15 +11,15 @@ interface Props {
 export function StatCard({ label, value, sub, highlight, color }: Props) {
   return (
     <div style={{
-      border: `1px solid ${highlight ? '#7c6af7' : '#333'}`,
+      border: `1px solid ${highlight ? c.accent : c.border}`,
       borderRadius: 6,
       padding: '12px 16px',
       flex: 1,
       minWidth: 120,
     }}>
-      <div style={{ color: '#666', fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 }}>{label}</div>
-      <div style={{ color: color ?? '#e8e8e8', fontSize: 22, fontWeight: 700, margin: '4px 0' }}>{value}</div>
-      {sub && <div style={{ color: '#555', fontSize: 11 }}>{sub}</div>}
+      <div style={{ color: c.textFaint, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 }}>{label}</div>
+      <div style={{ color: color ?? c.text, fontSize: 22, fontWeight: 700, margin: '4px 0' }}>{value}</div>
+      {sub && <div style={{ color: c.textGhost, fontSize: 11 }}>{sub}</div>}
     </div>
   )
 }

@@ -23,16 +23,15 @@ describe('StatCard', () => {
     expect(screen.getByText('high')).toBeInTheDocument()
   })
 
-  it('applies highlight border when highlight=true', () => {
+  it('applies highlight border using accent CSS variable', () => {
     const { container } = render(<StatCard label="L" value="V" highlight />)
     const card = container.firstChild as HTMLElement
-    // jsdom normalizes hex to rgb
-    expect(card.style.border).toContain('rgb(124, 106, 247)')
+    expect(card.style.border).toContain('var(--accent)')
   })
 
-  it('applies default border when highlight is not set', () => {
+  it('applies default border using border CSS variable', () => {
     const { container } = render(<StatCard label="L" value="V" />)
     const card = container.firstChild as HTMLElement
-    expect(card.style.border).toContain('rgb(51, 51, 51)')
+    expect(card.style.border).toContain('var(--border)')
   })
 })
