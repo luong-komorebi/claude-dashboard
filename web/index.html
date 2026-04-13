@@ -10,6 +10,8 @@
       (function () {
         try {
           var t = localStorage.getItem('claude-dashboard:theme');
+          // Remap legacy "default" id to the new github-dark id
+          if (t === 'default') t = 'github-dark';
           if (t) document.documentElement.setAttribute('data-theme', t);
         } catch (_) {}
       })();

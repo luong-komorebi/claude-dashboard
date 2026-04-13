@@ -114,7 +114,7 @@ export function Overview({ stats, events, onDrillDown }: Props) {
         <StatCard
           label={`Cost · ${thisMonthLabel}`}
           value={fmtCost(monthCost)}
-          sub={lastMonth ? `${fmtPct(monthChangePct)} vs last month` : 'no prior month'}
+          sub={lastMonth ? `${fmtPct(monthChangePct)} · API-equivalent` : 'API-equivalent'}
           highlight
           color={monthChangePct > 0 ? c.error : monthChangePct < 0 ? c.success : undefined}
         />

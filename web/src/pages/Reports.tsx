@@ -207,6 +207,52 @@ export function ReportsPage({ events }: { events: UsageEvent[] }) {
   )
 }
 
+// ─── Subscription notice ─────────────────────────────────────────────────────
+
+function SubscriptionNotice() {
+  return (
+    <div
+      style={{
+        background: c.surface,
+        border: `1px solid ${c.border}`,
+        borderLeft: `3px solid ${c.accent}`,
+        borderRadius: 4,
+        padding: '10px 14px',
+        marginBottom: 16,
+        fontSize: 12,
+        color: c.textMuted,
+        lineHeight: 1.6,
+      }}
+    >
+      <strong style={{ color: c.text }}>Heads up:</strong> these costs are
+      the <em>API-equivalent</em> of your token usage, computed from public
+      LiteLLM pricing. If you're on a <strong style={{ color: c.text }}>Claude Code
+      Pro/Max subscription</strong>, you pay a flat monthly fee and aren't
+      actually billed per token — the numbers below show what the same usage
+      would cost if you called the Anthropic API directly. Useful for sizing,
+      not for reconciling your invoice.{' '}
+      <InfoHint title="Why do I see API costs if I pay a subscription?">
+        <p style={{ margin: '0 0 8px' }}>
+          Claude Code logs every assistant message with its token counts in{' '}
+          <code>~/.claude/projects/&lt;uuid&gt;.jsonl</code>. This dashboard
+          reads those logs and multiplies the tokens by Anthropic's published
+          API rates (via LiteLLM's pricing data).
+        </p>
+        <p style={{ margin: '0 0 8px' }}>
+          Subscription users (Pro, Max) pay a fixed monthly amount regardless
+          of token usage, so this "cost" is hypothetical — it's what the same
+          work would have cost on pay-as-you-go API billing.
+        </p>
+        <p style={{ margin: 0 }}>
+          It's still useful for: comparing projects, catching runaway sessions,
+          estimating if a heavy workflow would be cheaper on API than subscription,
+          or getting a sense of which models cost most.
+        </p>
+      </InfoHint>
+    </div>
+  )
+}
+
 // ─── Tables ───────────────────────────────────────────────────────────────────
 
 const th: React.CSSProperties = {
