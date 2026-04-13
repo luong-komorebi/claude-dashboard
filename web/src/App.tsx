@@ -2,7 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import type { DashboardData } from './api'
 import type { WorkerResponse } from './worker/parser.worker'
 import { pickClaudeDir, getStoredDir, clearHandle } from './fs-access'
-import { saveToOpfs, loadFromOpfs, clearOpfsCache } from './opfs'
+import { saveToOpfs, loadFromOpfs, clearOpfsCache, cleanupLegacyCache } from './opfs'
+import { createSyncChannel, broadcast, withParseLock, type SyncMessage } from './sync'
+import { exportDashboard } from './export'
 import { Stats } from './pages/Stats'
 import { Usage } from './pages/Usage'
 import { Projects } from './pages/Projects'
@@ -11,6 +13,7 @@ import { Todos } from './pages/Todos'
 import { Sessions } from './pages/Sessions'
 import { Settings } from './pages/Settings'
 import { Trends } from './pages/Trends'
+import { PrivacyBadge } from './components/PrivacyBadge'
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
 
@@ -60,15 +63,34 @@ export default function App() {
   const [state, setState] = useState<AppState>({ phase: 'checking' })
   const [tab, setTab] = useState<Tab>('Stats')
   const [refreshing, setRefreshing] = useState(false)
+  const [exportStatus, setExportStatus] = useState<string | null>(null)
   const tabIndexRef = useRef(TABS.indexOf('Stats'))
+  const channelRef = useRef<BroadcastChannel | null>(null)
 
-  // ── Startup: check for stored dir, show OPFS cache immediately, re-parse in background
+  // ── Startup: cleanup legacy cache, open sync channel, load data
   useEffect(() => {
     let cancelled = false
+    void cleanupLegacyCache()
+
+    // Multi-tab sync channel — listens for "refreshed" from other tabs
+    const channel = createSyncChannel()
+    channelRef.current = channel
+    channel.onmessage = async (e: MessageEvent<SyncMessage>) => {
+      if (e.data.type === 'refreshed') {
+        const cached = await loadFromOpfs()
+        if (cached && !cancelled) {
+          setState(prev => prev.phase === 'ready'
+            ? { phase: 'ready', data: cached.data, dir: prev.dir, stale: false }
+            : prev)
+        }
+      } else if (e.data.type === 'cleared' && !cancelled) {
+        setState({ phase: 'pick' })
+      }
+    }
 
     getStoredDir().then(async dir => {
       if (!dir) {
-        setState({ phase: 'pick' })
+        if (!cancelled) setState({ phase: 'pick' })
         return
       }
 
@@ -80,23 +102,39 @@ export default function App() {
         setState({ phase: 'loading' })
       }
 
-      // Re-parse in Worker to get fresh data
+      // Re-parse in Worker, inside a cross-tab parse lock
       try {
-        const data = await parseInWorker(dir)
+        const data = await withParseLock(() => parseInWorker(dir))
         if (!cancelled) {
           await saveToOpfs(data)
           setState({ phase: 'ready', data, dir, stale: false })
+          broadcast(channel, { type: 'refreshed', cachedAt: Date.now() })
         }
       } catch (e) {
         if (!cancelled && !cached) {
           setState({ phase: 'error', message: String(e) })
         }
-        // If we already showed stale data, silently keep it
       }
     })
 
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+      channel.close()
+      channelRef.current = null
+    }
   }, [])
+
+  // ── Badging API: reflect in-progress + pending todos on the app icon
+  useEffect(() => {
+    if (!navigator.setAppBadge) return
+    if (state.phase !== 'ready') return
+    const count = state.data.todos.in_progress_count + state.data.todos.pending_count
+    if (count > 0) {
+      void navigator.setAppBadge(count)
+    } else {
+      void navigator.clearAppBadge?.()
+    }
+  }, [state])
 
   // ── Handlers
 
@@ -104,9 +142,10 @@ export default function App() {
     try {
       const dir = await pickClaudeDir()
       setState({ phase: 'loading' })
-      const data = await parseInWorker(dir)
+      const data = await withParseLock(() => parseInWorker(dir))
       await saveToOpfs(data)
       setState({ phase: 'ready', data, dir, stale: false })
+      if (channelRef.current) broadcast(channelRef.current, { type: 'refreshed', cachedAt: Date.now() })
     } catch (e: unknown) {
       if (e instanceof Error && e.name === 'AbortError') {
         setState({ phase: 'pick' })
@@ -120,9 +159,10 @@ export default function App() {
     if (state.phase !== 'ready' || refreshing) return
     setRefreshing(true)
     try {
-      const data = await parseInWorker(state.dir)
+      const data = await withParseLock(() => parseInWorker(state.dir))
       await saveToOpfs(data)
       setState({ phase: 'ready', data, dir: state.dir, stale: false })
+      if (channelRef.current) broadcast(channelRef.current, { type: 'refreshed', cachedAt: Date.now() })
     } catch (e) {
       setState({ phase: 'error', message: String(e) })
     } finally {
@@ -133,7 +173,23 @@ export default function App() {
   const reset = async () => {
     await clearHandle()
     await clearOpfsCache()
+    if (navigator.clearAppBadge) void navigator.clearAppBadge()
+    if (channelRef.current) broadcast(channelRef.current, { type: 'cleared' })
     setState({ phase: 'pick' })
+  }
+
+  const exportData = async () => {
+    if (state.phase !== 'ready') return
+    try {
+      const result = await exportDashboard(state.data)
+      if (result === 'saved') {
+        setExportStatus('✓ Exported')
+        setTimeout(() => setExportStatus(null), 2000)
+      }
+    } catch (e) {
+      setExportStatus(`Failed: ${e instanceof Error ? e.message : String(e)}`)
+      setTimeout(() => setExportStatus(null), 3000)
+    }
   }
 
   const changeTab = (next: Tab) => {
@@ -172,7 +228,11 @@ export default function App() {
             Open ~/.claude folder
           </button>
 
-          <div style={{ marginTop: 32, textAlign: 'left', background: '#111', border: '1px solid #222', borderRadius: 8, padding: 20 }}>
+          <div style={{ marginTop: 20 }}>
+            <PrivacyBadge variant="full" />
+          </div>
+
+          <div style={{ marginTop: 20, textAlign: 'left', background: '#111', border: '1px solid #222', borderRadius: 8, padding: 20 }}>
             <div style={{ color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 14 }}>How to navigate to the folder</div>
             {[
               { os: 'macOS', steps: [
@@ -243,6 +303,7 @@ export default function App() {
         ))}
 
         <div style={{ position: 'absolute', bottom: 16, left: 0, right: 0, padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <PrivacyBadge />
           {stale && (
             <div style={{ color: '#555', fontSize: 10, textAlign: 'center', marginBottom: 2 }}>
               {refreshing ? '↻ Updating…' : cachedAt ? `cached ${new Date(cachedAt).toLocaleTimeString()}` : 'stale'}
@@ -255,6 +316,13 @@ export default function App() {
             fontSize: 12, width: '100%',
           }}>
             {refreshing ? 'Refreshing…' : '↻ Refresh'}
+          </button>
+          <button onClick={exportData} style={{
+            background: 'transparent', border: '1px solid #2a2a2a',
+            color: exportStatus ? '#4caf50' : '#666', borderRadius: 4,
+            padding: '5px 12px', cursor: 'pointer', fontSize: 11, width: '100%',
+          }}>
+            {exportStatus ?? '↓ Export JSON'}
           </button>
           <button onClick={reset} style={{
             background: 'transparent', border: '1px solid #2a2a2a',
