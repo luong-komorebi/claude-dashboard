@@ -14,9 +14,6 @@ updates:
       time: "09:00"
       timezone: "UTC"
     open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-      - "ecosystem:web"
     commit-message:
       prefix: "chore(web)"
       include: "scope"
@@ -37,9 +34,6 @@ updates:
       time: "09:00"
       timezone: "UTC"
     open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-      - "ecosystem:rust"
     commit-message:
       prefix: "chore(wasm)"
       include: "scope"
@@ -60,9 +54,6 @@ updates:
       time: "09:00"
       timezone: "UTC"
     open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-      - "ecosystem:rust"
     commit-message:
       prefix: "chore(server)"
       include: "scope"
@@ -83,9 +74,6 @@ updates:
       time: "09:00"
       timezone: "UTC"
     open-pull-requests-limit: 3
-    labels:
-      - "dependencies"
-      - "ecosystem:actions"
     commit-message:
       prefix: "chore(ci)"
     groups:
