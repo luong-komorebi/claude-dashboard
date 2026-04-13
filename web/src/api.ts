@@ -131,6 +131,48 @@ export interface ProjectCostRecord {
   lastDurationMs: number | null
 }
 
+// ─── Cheap-win data sources from the `~/.claude` gist ─────────────────────────
+
+/** One version section extracted from `cache/changelog.md`. */
+export interface ChangelogEntry {
+  version: string           // "2.1.101"
+  items: string[]           // markdown bullet list — stripped of `- ` prefix
+}
+
+/** A user-defined slash command from `commands/*.md`. */
+export interface CustomCommand {
+  name: string              // filename without `.md`
+  description: string | null
+  body: string              // markdown content minus frontmatter
+}
+
+/** A user-defined skill from `skills/<name>/SKILL.md`. */
+export interface CustomSkill {
+  name: string              // directory name
+  description: string | null
+  hasScripts: boolean       // whether a scripts/ subdirectory exists
+}
+
+/** A currently-running Claude Code process (from `sessions/<pid>.json`). */
+export interface LiveSession {
+  pid: number
+  sessionId: string
+  cwd: string
+  startedAt: number         // epoch ms
+  kind: string              // 'interactive' | 'headless' | …
+  entrypoint: string        // 'claude-cli' | 'claude-vscode' | …
+}
+
+/** A connected IDE extension (from `ide/<pid>.lock`). Auth token REDACTED. */
+export interface ConnectedIde {
+  pid: number
+  ideName: string
+  workspaceFolders: string[]
+  transport: string         // 'ws' | 'http' | …
+  runningInWindows: boolean
+  // NOTE: the source file contains `authToken` — we NEVER copy it out
+}
+
 export interface DashboardData {
   stats: StatsData
   usage: UsageData
@@ -141,6 +183,11 @@ export interface DashboardData {
   settings: SettingsData
   usage_events: UsageEvent[]
   account: AccountInfo | null
+  changelog: ChangelogEntry[]
+  commands: CustomCommand[]
+  skills: CustomSkill[]
+  liveSessions: LiveSession[]
+  connectedIdes: ConnectedIde[]
   /**
    * Map from Claude Code's encoded project ID → real filesystem path,
    * extracted from the `cwd` field embedded in JSONL session events.

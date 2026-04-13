@@ -13,6 +13,8 @@ import type {
   DashboardData, StatsData, UsageData, Project, Plugin,
   TodosData, SessionFacet, SettingsData, UsageEvent,
   AccountInfo, ProjectCostRecord,
+  ChangelogEntry, CustomCommand, CustomSkill,
+  LiveSession, ConnectedIde,
 } from '../api'
 
 // ─── File-system helpers ──────────────────────────────────────────────────────
@@ -470,9 +472,184 @@ function redactAndBuildAccountInfo(raw: Record<string, unknown>, source: string)
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// "Cheap wins" — extra data sources from the ~/.claude gist
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Parse `cache/changelog.md`. Claude Code's own release notes, shaped as:
+ *
+ *     # Changelog
+ *
+ *     ## 2.1.101
+ *     - Added `/team-onboarding` command…
+ *     - Improved brief mode to retry once…
+ *
+ *     ## 2.1.100
+ *     - …
+ */
+async function parseChangelog(dir: FileSystemDirectoryHandle): Promise<ChangelogEntry[]> {
+  const md = await readText(dir, 'cache', 'changelog.md')
+  if (!md) return []
+
+  const entries: ChangelogEntry[] = []
+  let current: ChangelogEntry | null = null
+
+  for (const line of md.split('\n')) {
+    const versionMatch = line.match(/^##\s+(\d+\.\d+\.\d+)/)
+    if (versionMatch) {
+      if (current) entries.push(current)
+      current = { version: versionMatch[1], items: [] }
+      continue
+    }
+    if (current && line.startsWith('- ')) {
+      current.items.push(line.slice(2).trim())
+    }
+  }
+  if (current) entries.push(current)
+
+  return entries
+}
+
+/**
+ * Parse `commands/*.md` — user-defined slash commands with YAML frontmatter.
+ * Frontmatter is optional; bodies may include any markdown.
+ */
+async function parseCommands(dir: FileSystemDirectoryHandle): Promise<CustomCommand[]> {
+  const commands: CustomCommand[] = []
+  for await (const [name, handle] of await listDir(dir, 'commands')) {
+    if (!name.endsWith('.md') || handle.kind !== 'file') continue
+    try {
+      const file = await (handle as FileSystemFileHandle).getFile()
+      const content = await file.text()
+      const { description, body } = parseFrontmatterMarkdown(content)
+      commands.push({
+        name: name.replace('.md', ''),
+        description,
+        body,
+      })
+    } catch { /* skip malformed */ }
+  }
+  commands.sort((a, b) => a.name.localeCompare(b.name))
+  return commands
+}
+
+/**
+ * Parse `skills/<skill-name>/SKILL.md` — user-defined skills. Each skill is
+ * a directory that contains a SKILL.md file and optionally a `scripts/`
+ * subdirectory with helper files.
+ */
+async function parseSkills(dir: FileSystemDirectoryHandle): Promise<CustomSkill[]> {
+  const skills: CustomSkill[] = []
+  for await (const [name, handle] of await listDir(dir, 'skills')) {
+    if (handle.kind !== 'directory') continue
+    try {
+      const skillDir = handle as FileSystemDirectoryHandle
+      const skillMd = await skillDir
+        .getFileHandle('SKILL.md')
+        .then(fh => fh.getFile())
+        .then(f => f.text())
+        .catch(() => null)
+      if (!skillMd) continue
+
+      const { description } = parseFrontmatterMarkdown(skillMd)
+      const hasScripts = await skillDir
+        .getDirectoryHandle('scripts')
+        .then(() => true)
+        .catch(() => false)
+
+      skills.push({ name, description, hasScripts })
+    } catch { /* skip */ }
+  }
+  skills.sort((a, b) => a.name.localeCompare(b.name))
+  return skills
+}
+
+/**
+ * Parse `sessions/<pid>.json` — currently-running (or recently-run) Claude
+ * Code processes. Useful for a "live sessions" widget.
+ */
+async function parseLiveSessions(dir: FileSystemDirectoryHandle): Promise<LiveSession[]> {
+  const out: LiveSession[] = []
+  for await (const [name, handle] of await listDir(dir, 'sessions')) {
+    if (!name.endsWith('.json') || handle.kind !== 'file') continue
+    try {
+      const raw = await (handle as FileSystemFileHandle).getFile().then(f => f.text())
+      const parsed = JSON.parse(raw) as Record<string, unknown>
+      if (typeof parsed.pid !== 'number') continue
+      out.push({
+        pid: parsed.pid,
+        sessionId: typeof parsed.sessionId === 'string' ? parsed.sessionId : '',
+        cwd: typeof parsed.cwd === 'string' ? parsed.cwd : '',
+        startedAt: typeof parsed.startedAt === 'number' ? parsed.startedAt : 0,
+        kind: typeof parsed.kind === 'string' ? parsed.kind : 'unknown',
+        entrypoint: typeof parsed.entrypoint === 'string' ? parsed.entrypoint : 'unknown',
+      })
+    } catch { /* skip malformed */ }
+  }
+  out.sort((a, b) => b.startedAt - a.startedAt)
+  return out
+}
+
+/**
+ * Parse `ide/<pid>.lock` — IDE extension lockfiles dropped by the Claude Code
+ * VS Code / JetBrains extensions when they attach to a running process. The
+ * source file contains an `authToken` field which we NEVER copy out.
+ */
+async function parseConnectedIdes(dir: FileSystemDirectoryHandle): Promise<ConnectedIde[]> {
+  const out: ConnectedIde[] = []
+  for await (const [name, handle] of await listDir(dir, 'ide')) {
+    if (!name.endsWith('.lock') || handle.kind !== 'file') continue
+    try {
+      const raw = await (handle as FileSystemFileHandle).getFile().then(f => f.text())
+      const parsed = JSON.parse(raw) as Record<string, unknown>
+      if (typeof parsed.pid !== 'number') continue
+      out.push({
+        pid: parsed.pid,
+        ideName: typeof parsed.ideName === 'string' ? parsed.ideName : 'unknown',
+        workspaceFolders: Array.isArray(parsed.workspaceFolders)
+          ? (parsed.workspaceFolders as unknown[]).filter(
+              (w): w is string => typeof w === 'string',
+            )
+          : [],
+        transport: typeof parsed.transport === 'string' ? parsed.transport : 'unknown',
+        runningInWindows: typeof parsed.runningInWindows === 'boolean' ? parsed.runningInWindows : false,
+        // authToken intentionally dropped
+      })
+    } catch { /* skip */ }
+  }
+  return out
+}
+
+/**
+ * Strip YAML frontmatter and pull out the `description:` field if present.
+ * Shared by parseCommands() and parseSkills() — both use the same format.
+ */
+function parseFrontmatterMarkdown(content: string): { description: string | null; body: string } {
+  const lines = content.split('\n')
+  if (lines[0] !== '---') {
+    return { description: null, body: content }
+  }
+  let end = -1
+  const frontmatter: Record<string, string> = {}
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i] === '---') { end = i; break }
+    const m = lines[i].match(/^(\w+):\s*(.*)$/)
+    if (m) frontmatter[m[1]] = m[2].trim()
+  }
+  if (end === -1) return { description: null, body: content }
+  return {
+    description: frontmatter.description ?? null,
+    body: lines.slice(end + 1).join('\n').trim(),
+  }
+}
+
 async function loadAll(req: WorkerRequest): Promise<DashboardData> {
   const dir = req.configDir
-  const [stats, usage, projects, plugins, todos, sessions, settings, eventsResult, account] = await Promise.all([
+  const [
+    stats, usage, projects, plugins, todos, sessions, settings, eventsResult, account,
+    changelog, commands, skills, liveSessions, connectedIdes,
+  ] = await Promise.all([
     parseStats(dir),
     parseUsage(dir),
     parseProjects(dir),
@@ -482,6 +659,11 @@ async function loadAll(req: WorkerRequest): Promise<DashboardData> {
     parseSettings(dir),
     parseUsageEvents(dir),
     parseAccountInfo(req.parentDir, req.configDirName, req.accountFile),
+    parseChangelog(dir),
+    parseCommands(dir),
+    parseSkills(dir),
+    parseLiveSessions(dir),
+    parseConnectedIdes(dir),
   ])
 
   const { events: usage_events, projectPaths } = eventsResult
@@ -497,6 +679,7 @@ async function loadAll(req: WorkerRequest): Promise<DashboardData> {
   return {
     stats, usage, projects, plugins, todos, sessions, settings,
     usage_events, project_paths, account,
+    changelog, commands, skills, liveSessions, connectedIdes,
   }
 }
 

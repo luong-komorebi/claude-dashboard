@@ -155,6 +155,40 @@ export const mockAccount: DashboardData['account'] = {
   source: '.claude.json',
 }
 
+export const mockChangelog: DashboardData['changelog'] = [
+  { version: '2.1.101', items: ['Added `/team-onboarding` command', 'Improved brief mode'] },
+  { version: '2.1.100', items: ['Fixed memory leak in long sessions'] },
+]
+
+export const mockCommands: DashboardData['commands'] = [
+  { name: 'deploy', description: 'Deploy to production', body: 'Run the deploy pipeline…' },
+]
+
+export const mockSkills: DashboardData['skills'] = [
+  { name: 'rust-debugger', description: 'Debug Rust code with gdb', hasScripts: true },
+]
+
+export const mockLiveSessions: DashboardData['liveSessions'] = [
+  {
+    pid: 42069,
+    sessionId: 'abc-123',
+    cwd: '/Users/alice/myrepo',
+    startedAt: 1_776_017_824_172,
+    kind: 'interactive',
+    entrypoint: 'claude-vscode',
+  },
+]
+
+export const mockConnectedIdes: DashboardData['connectedIdes'] = [
+  {
+    pid: 646,
+    ideName: 'Visual Studio Code',
+    workspaceFolders: ['/Users/alice/myrepo'],
+    transport: 'ws',
+    runningInWindows: false,
+  },
+]
+
 export const mockDashboard: DashboardData = {
   stats: mockStats,
   usage: mockUsage,
@@ -169,4 +203,9 @@ export const mockDashboard: DashboardData = {
     '-Users-alice-other': '/Users/alice/other',
   },
   account: mockAccount,
+  changelog: mockChangelog,
+  commands: mockCommands,
+  skills: mockSkills,
+  liveSessions: mockLiveSessions,
+  connectedIdes: mockConnectedIdes,
 }

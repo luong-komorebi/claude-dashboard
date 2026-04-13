@@ -611,7 +611,7 @@ export default function App() {
 
       {/* Main content — view-transition-name is set via .tab-content class */}
       <div className="tab-content" style={{ flex: 1, padding: 24, overflow: 'auto' }}>
-        {tab === 'Overview'  && <Overview  stats={data.stats} events={data.usage_events} projectPaths={data.project_paths} account={data.account} onDrillDown={changeTab} onPickAccountFile={pickAccountFile} />}
+        {tab === 'Overview'  && <Overview  stats={data.stats} events={data.usage_events} projectPaths={data.project_paths} account={data.account} changelog={data.changelog} liveSessions={data.liveSessions} onDrillDown={changeTab} onPickAccountFile={pickAccountFile} />}
         {tab === 'Analytics' && <Analytics stats={data.stats} events={data.usage_events} />}
         {tab === 'Projects'  && <Projects  data={data.projects} />}
         {tab === 'Activity'  && <Activity  data={data} />}

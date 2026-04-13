@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { StatsData, UsageEvent, AccountInfo } from '../api'
+import type { StatsData, UsageEvent, AccountInfo, ChangelogEntry, LiveSession } from '../api'
 import { SectionHeader } from '../components/SectionHeader'
 import { StatCard } from '../components/StatCard'
 import { c } from '../theme/colors'
@@ -52,6 +52,8 @@ interface Props {
   projectPaths: Record<string, string>
   /** Parsed from ~/.claude.json if available, null if not loaded yet. */
   account: AccountInfo | null
+  changelog: ChangelogEntry[]
+  liveSessions: LiveSession[]
   onDrillDown: (target: 'Analytics' | 'Projects' | 'Activity' | 'Config') => void
   /** Callback to trigger the file picker for the account JSON. */
   onPickAccountFile: () => void
@@ -89,7 +91,7 @@ function filterByWindow<T extends { timestamp: string } | { date: string }>(
   })
 }
 
-export function Overview({ stats, events, projectPaths, account, onDrillDown, onPickAccountFile }: Props) {
+export function Overview({ stats, events, projectPaths, account, changelog, liveSessions, onDrillDown, onPickAccountFile }: Props) {
   const [window, setWindow] = useState<Window>('all')
   const [reports, setReports] = useState<Reports | null>(null)
   const [trends, setTrends] = useState<TrendMetrics | null>(null)
@@ -269,6 +271,14 @@ export function Overview({ stats, events, projectPaths, account, onDrillDown, on
         onPickAccountFile={onPickAccountFile}
         onDrillDown={() => onDrillDown('Config')}
       />
+
+      {/* ── Live sessions + What's new (conditional) ──────────────────────── */}
+      {(liveSessions.length > 0 || changelog.length > 0) && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+          <LiveSessionsCard sessions={liveSessions} />
+          <WhatsNewCard entries={changelog} />
+        </div>
+      )}
 
       {/* ── Primary chart ────────────────────────────────────────────────── */}
       <ChartCard title="Last 30 Days">
@@ -630,6 +640,130 @@ function AccountCard({
         </div>
       )}
     </div>
+  )
+}
+
+function LiveSessionsCard({ sessions }: { sessions: LiveSession[] }) {
+  if (sessions.length === 0) {
+    return (
+      <SectionCard title="Live Claude Sessions">
+        <div style={{ color: c.textGhost, fontSize: 12 }}>
+          No active sessions
+        </div>
+      </SectionCard>
+    )
+  }
+
+  return (
+    <SectionCard title={`Live Claude Sessions (${sessions.length})`}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {sessions.slice(0, 4).map(s => {
+          const minutes = s.startedAt > 0 ? Math.floor((Date.now() - s.startedAt) / 60000) : 0
+          const folder = s.cwd ? s.cwd.split('/').filter(Boolean).slice(-2).join('/') : '(no cwd)'
+          return (
+            <div key={s.pid} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              fontSize: 12, borderTop: `1px solid ${c.borderSoft}`, paddingTop: 8,
+            }}>
+              <span style={{
+                display: 'inline-block', width: 6, height: 6, borderRadius: '50%',
+                background: c.success, flexShrink: 0,
+              }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  color: c.text, fontFamily: 'monospace',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }} title={s.cwd}>
+                  {folder}
+                </div>
+                <div style={{ color: c.textFaint, fontSize: 10 }}>
+                  {s.entrypoint} · pid {s.pid}
+                  {minutes > 0 && <> · running {minutes}m</>}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+        {sessions.length > 4 && (
+          <div style={{ color: c.textFaint, fontSize: 10, paddingTop: 4 }}>
+            + {sessions.length - 4} more
+          </div>
+        )}
+      </div>
+    </SectionCard>
+  )
+}
+
+function WhatsNewCard({ entries }: { entries: ChangelogEntry[] }) {
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(entries.slice(0, 1).map(e => e.version)))
+
+  if (entries.length === 0) {
+    return (
+      <SectionCard title="What's New in Claude Code">
+        <div style={{ color: c.textGhost, fontSize: 12 }}>
+          No changelog available
+        </div>
+      </SectionCard>
+    )
+  }
+
+  const toggle = (v: string) => setExpanded(prev => {
+    const next = new Set(prev)
+    if (next.has(v)) next.delete(v); else next.add(v)
+    return next
+  })
+
+  return (
+    <SectionCard title="What's New in Claude Code">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 200, overflowY: 'auto' }}>
+        {entries.slice(0, 5).map(e => {
+          const isOpen = expanded.has(e.version)
+          return (
+            <div key={e.version}>
+              <button
+                onClick={() => toggle(e.version)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  background: 'transparent', border: 'none', padding: '2px 0',
+                  color: c.accent, fontSize: 12, fontWeight: 600,
+                  cursor: 'pointer', fontFamily: 'inherit', width: '100%', textAlign: 'left',
+                }}
+              >
+                <span style={{ color: c.textFaint, fontSize: 9 }}>{isOpen ? '▼' : '▶'}</span>
+                v{e.version}
+                <span style={{ color: c.textFaint, fontWeight: 400, fontSize: 10 }}>
+                  · {e.items.length} change{e.items.length === 1 ? '' : 's'}
+                </span>
+              </button>
+              {isOpen && (
+                <ul style={{
+                  margin: '2px 0 6px 14px', padding: 0, listStyle: 'none',
+                  display: 'flex', flexDirection: 'column', gap: 3,
+                }}>
+                  {e.items.slice(0, 6).map((item, i) => (
+                    <li key={i} style={{
+                      color: c.textMuted, fontSize: 11, lineHeight: 1.4,
+                      paddingLeft: 10, position: 'relative',
+                    }}>
+                      <span style={{
+                        position: 'absolute', left: 0, top: 6,
+                        width: 3, height: 3, borderRadius: '50%', background: c.textFaint,
+                      }} />
+                      {item.length > 120 ? item.slice(0, 117) + '…' : item}
+                    </li>
+                  ))}
+                  {e.items.length > 6 && (
+                    <li style={{ color: c.textFaint, fontSize: 10, paddingLeft: 10 }}>
+                      + {e.items.length - 6} more
+                    </li>
+                  )}
+                </ul>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </SectionCard>
   )
 }
 
