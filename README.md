@@ -4,6 +4,10 @@
 
 A fully client-side dashboard for `~/.claude`. React + Rust/WASM + PWA. Runs in the browser, reads your local Claude Code data directly via the File System Access API, and never sends a byte over the network.
 
+## Quickstart
+
+**Open [luong-komorebi.github.io/claude-dashboard](https://luong-komorebi.github.io/claude-dashboard/) → click "Open ~/.claude folder" → pick your home or `.claude` folder. Done.**
+
 - **Overview** — hero metrics, cost trends, model breakdown, recent sessions
 - **Insights** — Holt-Winters forecasting, anomaly detection, GitHub-style activity heatmap, what-if cost simulator
 - **Reports** — Daily / Weekly / Monthly / Sessions / 5-hour Blocks tables
