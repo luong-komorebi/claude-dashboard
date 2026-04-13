@@ -13,7 +13,6 @@ import { saveToOpfs, loadFromOpfs, clearOpfsCache, cleanupLegacyCache } from './
 import { isStoragePersisted, requestPersistence } from './persistence'
 import { useInstallPrompt, useOnlineStatus, useIsStandalone } from './pwa'
 import { createSyncChannel, broadcast, withParseLock, type SyncMessage } from './sync'
-import { exportDashboard } from './export'
 import { Overview } from './pages/Overview'
 import { Analytics } from './pages/Analytics'
 import { Projects } from './pages/Projects'
@@ -90,7 +89,6 @@ export default function App() {
   const [state, setState] = useState<AppState>({ phase: 'checking' })
   const [tab, setTab] = useState<Tab>('Overview')
   const [refreshing, setRefreshing] = useState(false)
-  const [exportStatus, setExportStatus] = useState<string | null>(null)
   const tabIndexRef = useRef(TABS.indexOf('Overview'))
   const channelRef = useRef<BroadcastChannel | null>(null)
 
@@ -314,20 +312,6 @@ export default function App() {
     if (navigator.clearAppBadge) void navigator.clearAppBadge()
     if (channelRef.current) broadcast(channelRef.current, { type: 'cleared' })
     setState({ phase: 'pick' })
-  }
-
-  const exportData = async () => {
-    if (state.phase !== 'ready') return
-    try {
-      const result = await exportDashboard(state.data)
-      if (result === 'saved') {
-        setExportStatus('✓ Exported')
-        setTimeout(() => setExportStatus(null), 2000)
-      }
-    } catch (e) {
-      setExportStatus(`Failed: ${e instanceof Error ? e.message : String(e)}`)
-      setTimeout(() => setExportStatus(null), 3000)
-    }
   }
 
   const changeTab = (next: Tab) => {
@@ -580,19 +564,27 @@ export default function App() {
           }}>
             {refreshing ? 'Refreshing…' : '↻ Refresh'}
           </button>
-          <button onClick={exportData} style={{
-            background: 'transparent', border: `1px solid ${c.borderSoft}`,
-            color: exportStatus ? c.success : c.textFaint, borderRadius: 4,
-            padding: '5px 12px', cursor: 'pointer', fontSize: 11, width: '100%',
-          }}>
-            {exportStatus ?? '↓ Export JSON'}
-          </button>
           <button onClick={reset} style={{
             background: 'transparent', border: `1px solid ${c.borderSoft}`,
             color: c.textDisabled, borderRadius: 4, padding: '5px 12px',
             cursor: 'pointer', fontSize: 11, width: '100%',
           }}>
             Change folder
+          </button>
+          <button
+            onClick={() => {
+              if (confirm('Clear ALL dashboard data (folder handle, account file, cached data, theme, budget) and return to the picker?')) {
+                void wipeData()
+              }
+            }}
+            style={{
+              background: 'transparent', border: `1px solid ${c.borderSoft}`,
+              color: c.textDisabled, borderRadius: 4, padding: '5px 12px',
+              cursor: 'pointer', fontSize: 11, width: '100%',
+            }}
+            title="Wipe everything stored by this tab"
+          >
+            Clear web data
           </button>
           <ThemeSwitcher />
         </div>

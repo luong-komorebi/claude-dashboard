@@ -10,40 +10,106 @@ interface Props {
   account: AccountInfo | null
   events: UsageEvent[]
   projectPaths: Record<string, string>
+  onPickAccountFile: () => void
 }
 
 const fmtCost = (v: number) => (v === 0 ? '$0' : `$${v.toFixed(v < 0.01 ? 4 : 2)}`)
 
-export function Account({ account, events, projectPaths }: Props) {
+export function Account({ account, events, projectPaths, onPickAccountFile }: Props) {
   const [revealEmail, setRevealEmail] = useState(false)
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
   const pricing = useMemo(() => pricingJson as PricingTable, [])
+
+  const copyTargetPath = () => {
+    const platform = navigator.userAgent.toLowerCase()
+    return platform.includes('win') ? '%USERPROFILE%\\.claude.json' : '~/.claude.json'
+  }
+
+  const handleCopyPath = async () => {
+    try {
+      await navigator.clipboard.writeText(copyTargetPath())
+      setCopyStatus('copied')
+    } catch {
+      setCopyStatus('failed')
+    }
+    setTimeout(() => setCopyStatus('idle'), 2000)
+  }
 
   if (!account) {
     return (
       <div>
         <SectionHeader
           title="Account"
-          sub="Account info from ~/.claude.json — requires picking your home folder"
+          sub="Account info from ~/.claude.json — pick the file manually to unlock it"
         />
         <div style={{
           background: c.surface, border: `1px solid ${c.border}`,
           borderLeft: `3px solid ${c.warning}`,
-          borderRadius: 4, padding: 16, fontSize: 13, color: c.textMuted, lineHeight: 1.6,
+          borderRadius: 4, padding: 20, fontSize: 13, color: c.textMuted, lineHeight: 1.7,
         }}>
-          <div style={{ color: c.text, fontWeight: 600, marginBottom: 8 }}>
+          <div style={{ color: c.text, fontWeight: 600, marginBottom: 10, fontSize: 14 }}>
             Account info unavailable
           </div>
-          <div style={{ marginBottom: 10 }}>
+          <div style={{ marginBottom: 14 }}>
             Claude Code stores account info (email, org, numStartups, per-project costs)
-            in <code style={code}>~/.claude.json</code> — a <em>sibling</em> of the
-            <code style={code}>.claude/</code> folder, not inside it. To access it, pick
-            your <strong style={{ color: c.text }}>home folder</strong> instead of
-            <code style={code}>.claude</code> directly.
+            in <code style={code}>~/.claude.json</code> — a <em>sibling</em> of the{' '}
+            <code style={code}>.claude/</code> folder. Your browser won't let us pick
+            the home folder (it contains SSH keys, AWS credentials, and other sensitive
+            files), so you need to pick the <strong style={{ color: c.text }}>single file</strong> directly.
           </div>
-          <div style={{ fontSize: 12, color: c.textFaint }}>
-            Click <strong>"Change folder"</strong> in the sidebar → pick your home folder
-            (not <code style={code}>.claude</code>) → the dashboard will auto-find
-            <code style={code}>.claude</code> inside and unlock this tab.
+
+          <div style={{ color: c.textFaint, fontSize: 12, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Quickest way
+          </div>
+
+          {/* Copy path + pick button row */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            background: c.bg, border: `1px solid ${c.border}`, borderRadius: 6,
+            padding: '10px 12px', marginBottom: 14,
+          }}>
+            <code style={{ ...code, flex: 1 }}>{copyTargetPath()}</code>
+            <button
+              onClick={handleCopyPath}
+              style={{
+                background: copyStatus === 'copied' ? c.success : c.surfaceHover,
+                border: `1px solid ${copyStatus === 'copied' ? c.success : c.border}`,
+                color: copyStatus === 'copied' ? c.accentFg : c.textMuted,
+                borderRadius: 3, padding: '5px 10px', fontSize: 11,
+                cursor: 'pointer', whiteSpace: 'nowrap',
+              }}
+            >
+              {copyStatus === 'copied' ? '✓ Copied' : 'Copy'}
+            </button>
+          </div>
+
+          <ol style={{ margin: 0, padding: '0 0 0 18px', color: c.textFaint, fontSize: 12 }}>
+            <li style={{ marginBottom: 6 }}>Click <strong style={{ color: c.text }}>Pick .claude.json</strong> below</li>
+            <li style={{ marginBottom: 6 }}>
+              In the file picker, press{' '}
+              <kbd style={kbd}>⇧ ⌘ G</kbd> (macOS) or click the{' '}
+              <strong style={{ color: c.text }}>address bar</strong> (Windows)
+            </li>
+            <li style={{ marginBottom: 6 }}>Paste the path above and press Enter</li>
+            <li>Select <code style={code}>.claude.json</code> and click <strong style={{ color: c.text }}>Open</strong></li>
+          </ol>
+
+          <button
+            onClick={onPickAccountFile}
+            style={{
+              marginTop: 16,
+              background: c.accent, color: c.accentFg, border: 'none',
+              borderRadius: 4, padding: '8px 18px', fontSize: 13, fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Pick .claude.json
+          </button>
+
+          <div style={{ fontSize: 11, color: c.textGhost, marginTop: 14, lineHeight: 1.5 }}>
+            <strong style={{ color: c.textFaint }}>Privacy:</strong> OAuth access/refresh
+            tokens and MCP server credentials are stripped inside the Web Worker before
+            they reach the main thread — they're never persisted to OPFS or shown in the UI.
           </div>
         </div>
       </div>
@@ -315,4 +381,13 @@ const code: React.CSSProperties = {
   borderRadius: 3,
   fontSize: 11,
   fontFamily: 'monospace',
+}
+
+const kbd: React.CSSProperties = {
+  background: c.surfaceHover,
+  padding: '1px 6px',
+  borderRadius: 3,
+  fontSize: 11,
+  fontFamily: 'monospace',
+  border: `1px solid ${c.border}`,
 }
