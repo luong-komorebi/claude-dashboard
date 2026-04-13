@@ -100,6 +100,37 @@ export interface UsageEvent {
   cache_read_input_tokens: number
 }
 
+/**
+ * Whitelisted subset of `~/.claude.json` (or `<config-dir>.json`). OAuth
+ * tokens, MCP server env vars, and any other credentials are stripped in
+ * the worker — they must NEVER reach the main thread.
+ */
+export interface AccountInfo {
+  email: string | null
+  accountUuid: string | null
+  organizationUuid: string | null
+  userId: string | null
+  numStartups: number
+  installMethod: string | null
+  theme: string | null
+  autoUpdates: boolean | null
+  hasCompletedOnboarding: boolean | null
+  /** Per-project runtime state Claude Code itself records (last cost, etc). */
+  projectCosts: ProjectCostRecord[]
+  /** Configured MCP server names — credentials stripped. */
+  mcpServers: string[]
+  /** Source filename we read (e.g. ".claude.json"), mostly for debugging. */
+  source: string
+}
+
+export interface ProjectCostRecord {
+  path: string
+  lastCost: number
+  lastSessionId: string | null
+  lastApiDurationMs: number | null
+  lastDurationMs: number | null
+}
+
 export interface DashboardData {
   stats: StatsData
   usage: UsageData
@@ -109,6 +140,7 @@ export interface DashboardData {
   sessions: SessionFacet[]
   settings: SettingsData
   usage_events: UsageEvent[]
+  account: AccountInfo | null
   /**
    * Map from Claude Code's encoded project ID → real filesystem path,
    * extracted from the `cwd` field embedded in JSONL session events.

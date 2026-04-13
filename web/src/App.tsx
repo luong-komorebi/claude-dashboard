@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import type { DashboardData } from './api'
 import type { WorkerResponse } from './worker/parser.worker'
 import { pickClaudeDir, getStoredDir, clearHandle, ensurePermission } from './fs-access'
+import type { StoredHandles } from './fs-access'
+import type { WorkerRequest } from './worker/parser.worker'
 import { saveToOpfs, loadFromOpfs, clearOpfsCache, cleanupLegacyCache } from './opfs'
 import { isStoragePersisted, requestPersistence } from './persistence'
 import { useInstallPrompt, useOnlineStatus, useIsStandalone } from './pwa'
@@ -28,13 +30,13 @@ type AppState =
   | { phase: 'checking' }
   | { phase: 'pick' }
   | { phase: 'loading' }
-  | { phase: 'reconnect'; dir: FileSystemDirectoryHandle; name: string }
-  | { phase: 'ready'; data: DashboardData; dir: FileSystemDirectoryHandle; stale: boolean; cachedAt?: number; needsPermission?: boolean }
+  | { phase: 'reconnect'; handles: StoredHandles }
+  | { phase: 'ready'; data: DashboardData; handles: StoredHandles; stale: boolean; cachedAt?: number; needsPermission?: boolean }
   | { phase: 'error'; message: string }
 
 // ─── Worker helper ────────────────────────────────────────────────────────────
 
-function parseInWorker(dir: FileSystemDirectoryHandle): Promise<DashboardData> {
+function parseInWorker(handles: StoredHandles): Promise<DashboardData> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(
       new URL('./worker/parser.worker.ts', import.meta.url),
@@ -46,7 +48,12 @@ function parseInWorker(dir: FileSystemDirectoryHandle): Promise<DashboardData> {
       else reject(new Error(e.data.error))
     }
     worker.onerror = (e) => { worker.terminate(); reject(new Error(e.message)) }
-    worker.postMessage(dir)
+    const req: WorkerRequest = {
+      configDir: handles.configDir,
+      parentDir: handles.parentDir,
+      configDirName: handles.configDirName,
+    }
+    worker.postMessage(req)
   })
 }
 
@@ -110,7 +117,7 @@ export default function App() {
         const cached = await loadFromOpfs()
         if (cached && !cancelled) {
           setState(prev => prev.phase === 'ready'
-            ? { phase: 'ready', data: cached.data, dir: prev.dir, stale: false }
+            ? { phase: 'ready', data: cached.data, handles: prev.handles, stale: false }
             : prev)
         }
       } else if (e.data.type === 'cleared' && !cancelled) {
@@ -124,7 +131,7 @@ export default function App() {
         return
       }
 
-      const { handle: dir, permission } = stored
+      const { handles, permission } = stored
 
       // Permission not granted yet — we can't call requestPermission() here
       // because it requires a user gesture. Instead, show cached data (if
@@ -137,13 +144,13 @@ export default function App() {
           setState({
             phase: 'ready',
             data: cached.data,
-            dir,
+            handles,
             stale: true,
             cachedAt: cached.cachedAt,
             needsPermission: true,
           })
         } else {
-          setState({ phase: 'reconnect', dir, name: dir.name })
+          setState({ phase: 'reconnect', handles })
         }
         return
       }
@@ -151,16 +158,16 @@ export default function App() {
       // Permission granted — stale-while-revalidate as usual
       const cached = await loadFromOpfs()
       if (cached && !cancelled) {
-        setState({ phase: 'ready', data: cached.data, dir, stale: true, cachedAt: cached.cachedAt })
+        setState({ phase: 'ready', data: cached.data, handles, stale: true, cachedAt: cached.cachedAt })
       } else if (!cancelled) {
         setState({ phase: 'loading' })
       }
 
       try {
-        const data = await withParseLock(() => parseInWorker(dir))
+        const data = await withParseLock(() => parseInWorker(handles))
         if (!cancelled) {
           await saveToOpfs(data)
-          setState({ phase: 'ready', data, dir, stale: false })
+          setState({ phase: 'ready', data, handles, stale: false })
           broadcast(channel, { type: 'refreshed', cachedAt: Date.now() })
         }
       } catch (e) {
@@ -198,12 +205,12 @@ export default function App() {
   // `SecurityError: Must be handling a user gesture to show a file picker.`
   const grantAccess = () => {
     pickClaudeDir()
-      .then(async dir => {
+      .then(async handles => {
         setState({ phase: 'loading' })
         try {
-          const data = await withParseLock(() => parseInWorker(dir))
+          const data = await withParseLock(() => parseInWorker(handles))
           await saveToOpfs(data)
-          setState({ phase: 'ready', data, dir, stale: false })
+          setState({ phase: 'ready', data, handles, stale: false })
           if (channelRef.current) {
             broadcast(channelRef.current, { type: 'refreshed', cachedAt: Date.now() })
           }
@@ -226,14 +233,14 @@ export default function App() {
     try {
       // Escalate permission if needed — this call is inside a click handler,
       // so the browser allows requestPermission() to prompt the user.
-      const ok = await ensurePermission(state.dir)
+      const ok = await ensurePermission(state.handles)
       if (!ok) {
         setRefreshing(false)
         return
       }
-      const data = await withParseLock(() => parseInWorker(state.dir))
+      const data = await withParseLock(() => parseInWorker(state.handles))
       await saveToOpfs(data)
-      setState({ phase: 'ready', data, dir: state.dir, stale: false })
+      setState({ phase: 'ready', data, handles: state.handles, stale: false })
       if (channelRef.current) broadcast(channelRef.current, { type: 'refreshed', cachedAt: Date.now() })
     } catch (e) {
       setState({ phase: 'error', message: String(e) })
@@ -244,13 +251,13 @@ export default function App() {
 
   const reconnect = async () => {
     if (state.phase !== 'reconnect') return
-    const ok = await ensurePermission(state.dir)
+    const ok = await ensurePermission(state.handles)
     if (!ok) return // user denied — stay on reconnect screen
     setState({ phase: 'loading' })
     try {
-      const data = await withParseLock(() => parseInWorker(state.dir))
+      const data = await withParseLock(() => parseInWorker(state.handles))
       await saveToOpfs(data)
-      setState({ phase: 'ready', data, dir: state.dir, stale: false })
+      setState({ phase: 'ready', data, handles: state.handles, stale: false })
       if (channelRef.current) broadcast(channelRef.current, { type: 'refreshed', cachedAt: Date.now() })
     } catch (e) {
       setState({ phase: 'error', message: String(e) })

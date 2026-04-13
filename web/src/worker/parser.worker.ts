@@ -12,6 +12,7 @@
 import type {
   DashboardData, StatsData, UsageData, Project, Plugin,
   TodosData, SessionFacet, SettingsData, UsageEvent,
+  AccountInfo, ProjectCostRecord,
 } from '../api'
 
 // ─── File-system helpers ──────────────────────────────────────────────────────
@@ -352,12 +353,109 @@ async function parseSettings(dir: FileSystemDirectoryHandle): Promise<SettingsDa
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
+export interface WorkerRequest {
+  configDir: FileSystemDirectoryHandle
+  parentDir: FileSystemDirectoryHandle | null
+  configDirName: string
+}
+
 export type WorkerResponse =
   | { ok: true; data: DashboardData }
   | { ok: false; error: string }
 
-async function loadAll(dir: FileSystemDirectoryHandle): Promise<DashboardData> {
-  const [stats, usage, projects, plugins, todos, sessions, settings, eventsResult] = await Promise.all([
+// ─── Account info (from ~/.claude.json or `<configDir>.json`) ─────────────────
+
+/**
+ * Read and REDACT `~/.claude.json` (or the sibling of the picked config dir).
+ * Returns only a whitelisted subset — OAuth tokens, MCP server env vars,
+ * and any other credentials are stripped here inside the worker, so they
+ * never reach the main thread or the OPFS cache.
+ *
+ * Tries multiple filename candidates because `CLAUDE_CONFIG_DIR` users may
+ * have `.claude-work.json` instead of `.claude.json`.
+ */
+async function parseAccountInfo(
+  parentDir: FileSystemDirectoryHandle | null,
+  configDirName: string,
+): Promise<AccountInfo | null> {
+  if (!parentDir) return null
+
+  // Candidates in order of preference:
+  //   1. `<configDirName>.json` — e.g. `.claude.json`, `.claude-work.json`
+  //   2. `.claude.json` — legacy default, in case the dir was renamed
+  const candidates = [
+    `${configDirName}.json`,
+    '.claude.json',
+  ]
+
+  for (const filename of candidates) {
+    try {
+      const fh = await parentDir.getFileHandle(filename)
+      const file = await fh.getFile()
+      const raw = JSON.parse(await file.text()) as Record<string, unknown>
+      return redactAndBuildAccountInfo(raw, filename)
+    } catch {
+      // File missing or unreadable — try next candidate
+    }
+  }
+
+  return null
+}
+
+/**
+ * Extract a whitelisted subset of `.claude.json` — everything else is
+ * dropped on the floor. Never persists OAuth tokens or MCP credentials.
+ */
+function redactAndBuildAccountInfo(raw: Record<string, unknown>, source: string): AccountInfo {
+  const oauthAccount = (raw.oauthAccount as Record<string, unknown> | undefined) ?? undefined
+
+  // Project cost state — the key varies between Claude Code versions.
+  // Try a few known shapes.
+  const projectsState =
+    (raw.projects as Record<string, unknown> | undefined) ??
+    (raw.projectState as Record<string, unknown> | undefined) ??
+    {}
+
+  const projectCosts: ProjectCostRecord[] = []
+  for (const [path, stateRaw] of Object.entries(projectsState)) {
+    if (!stateRaw || typeof stateRaw !== 'object') continue
+    const state = stateRaw as Record<string, unknown>
+    const lastCost = state.lastCost
+    if (typeof lastCost !== 'number') continue
+    projectCosts.push({
+      path,
+      lastCost,
+      lastSessionId: typeof state.lastSessionId === 'string' ? state.lastSessionId : null,
+      lastApiDurationMs: typeof state.lastAPIDuration === 'number' ? state.lastAPIDuration : null,
+      lastDurationMs: typeof state.lastDuration === 'number' ? state.lastDuration : null,
+    })
+  }
+  // Most expensive first — gives the UI a ready-to-render sort order
+  projectCosts.sort((a, b) => b.lastCost - a.lastCost)
+
+  // MCP servers — expose NAMES ONLY, never env/headers/apiKey/token
+  const mcpServersRaw = (raw.mcpServers as Record<string, unknown> | undefined) ?? {}
+  const mcpServers = Object.keys(mcpServersRaw)
+
+  return {
+    email: typeof raw.emailAddress === 'string' ? raw.emailAddress : null,
+    accountUuid: typeof oauthAccount?.accountUuid === 'string' ? (oauthAccount.accountUuid as string) : null,
+    organizationUuid: typeof oauthAccount?.organizationUuid === 'string' ? (oauthAccount.organizationUuid as string) : null,
+    userId: typeof raw.userID === 'string' || typeof raw.userID === 'number' ? String(raw.userID) : null,
+    numStartups: typeof raw.numStartups === 'number' ? raw.numStartups : 0,
+    installMethod: typeof raw.installMethod === 'string' ? raw.installMethod : null,
+    theme: typeof raw.theme === 'string' ? raw.theme : null,
+    autoUpdates: typeof raw.autoUpdates === 'boolean' ? raw.autoUpdates : null,
+    hasCompletedOnboarding: typeof raw.hasCompletedOnboarding === 'boolean' ? raw.hasCompletedOnboarding : null,
+    projectCosts,
+    mcpServers,
+    source,
+  }
+}
+
+async function loadAll(req: WorkerRequest): Promise<DashboardData> {
+  const dir = req.configDir
+  const [stats, usage, projects, plugins, todos, sessions, settings, eventsResult, account] = await Promise.all([
     parseStats(dir),
     parseUsage(dir),
     parseProjects(dir),
@@ -366,26 +464,26 @@ async function loadAll(dir: FileSystemDirectoryHandle): Promise<DashboardData> {
     parseSessions(dir),
     parseSettings(dir),
     parseUsageEvents(dir),
+    parseAccountInfo(req.parentDir, req.configDirName),
   ])
 
   const { events: usage_events, projectPaths } = eventsResult
   const project_paths: Record<string, string> = Object.fromEntries(projectPaths.entries())
 
-  // Overwrite each Project's guessed `path` with the real cwd when available.
-  // The naive dash-splitting in parseProjects is only a fallback for projects
-  // that have no associated JSONL events yet.
   for (const p of projects) {
     const real = project_paths[p.id]
     if (real) p.path = real
   }
 
-  // Re-sort alphabetically by the (now-accurate) path
   projects.sort((a, b) => a.path.localeCompare(b.path))
 
-  return { stats, usage, projects, plugins, todos, sessions, settings, usage_events, project_paths }
+  return {
+    stats, usage, projects, plugins, todos, sessions, settings,
+    usage_events, project_paths, account,
+  }
 }
 
-self.addEventListener('message', (e: MessageEvent<FileSystemDirectoryHandle>) => {
+self.addEventListener('message', (e: MessageEvent<WorkerRequest>) => {
   loadAll(e.data)
     .then(data => self.postMessage({ ok: true, data } satisfies WorkerResponse))
     .catch(err => self.postMessage({ ok: false, error: String(err) } satisfies WorkerResponse))
