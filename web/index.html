@@ -5,17 +5,13 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Claude Dashboard</title>
-    <!-- FOUC prevention: apply stored theme before CSS loads. -->
-    <script>
-      (function () {
-        try {
-          var t = localStorage.getItem('claude-dashboard:theme');
-          // Remap the legacy "default" id to the current default theme
-          if (t === 'default') t = 'tokyo-night';
-          if (t) document.documentElement.setAttribute('data-theme', t);
-        } catch (_) {}
-      })();
-    </script>
+    <!--
+      FOUC prevention: apply the stored theme before CSS parses.
+      Served from public/ so `script-src 'self'` allows it without needing
+      'unsafe-inline' or a content hash. Bump the query string if the file
+      changes to bust the service worker cache.
+    -->
+    <script src="theme-init.js?v=1"></script>
   </head>
   <body>
     <div id="root"></div>
