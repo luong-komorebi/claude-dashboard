@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:wasm": "wasm-pack build ../wasm --target bundler --out-dir src/wasm-pkg",
+    "build:wasm": "wasm-pack build ../wasm --target bundler --out-dir ../web/src/wasm-pkg",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",

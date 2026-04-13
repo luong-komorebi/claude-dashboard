@@ -13,13 +13,14 @@ import { Todos } from './pages/Todos'
 import { Sessions } from './pages/Sessions'
 import { Settings } from './pages/Settings'
 import { Trends } from './pages/Trends'
+import { ReportsPage } from './pages/Reports'
 import { PrivacyBadge } from './components/PrivacyBadge'
 import { ThemeSwitcher } from './components/ThemeSwitcher'
 import { c } from './theme/colors'
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
 
-const TABS = ['Stats', 'Trends', 'Usage', 'Sessions', 'Projects', 'Plugins', 'Todos', 'Settings'] as const
+const TABS = ['Stats', 'Trends', 'Reports', 'Usage', 'Sessions', 'Projects', 'Plugins', 'Todos', 'Settings'] as const
 type Tab = typeof TABS[number]
 
 // ─── State machine ───────────────────────────────────────────────────────────
@@ -342,6 +343,7 @@ export default function App() {
       <div className="tab-content" style={{ flex: 1, padding: 24, overflow: 'auto' }}>
         {tab === 'Stats'     && <Stats     data={data.stats} />}
         {tab === 'Trends'    && <Trends    data={data.stats} />}
+        {tab === 'Reports'   && <ReportsPage events={data.usage_events} />}
         {tab === 'Usage'     && <Usage     data={data.usage} />}
         {tab === 'Sessions'  && <Sessions  data={data.sessions} />}
         {tab === 'Projects'  && <Projects  data={data.projects} />}

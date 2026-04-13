@@ -1,0 +1,59 @@
+name: Update Model Pricing
+
+on:
+  schedule:
+    # Weekly on Monday 06:00 UTC
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    name: Refresh bundled Anthropic pricing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch LiteLLM pricing
+        run: |
+          curl -sSL https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json \
+            -o /tmp/litellm_prices.json
+          test -s /tmp/litellm_prices.json
+
+      - name: Filter to Anthropic models
+        run: python3 scripts/filter_pricing.py /tmp/litellm_prices.json web/src/cost/pricing.json
+
+      - name: Check for changes
+        id: diff
+        run: |
+          if git diff --quiet web/src/cost/pricing.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "diff<<EOF" >> "$GITHUB_OUTPUT"
+            git diff --stat web/src/cost/pricing.json >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create pull request
+        if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: 'chore: refresh Anthropic pricing from LiteLLM'
+          title: 'chore: refresh Anthropic pricing from LiteLLM'
+          body: |
+            Automated weekly refresh of `web/src/cost/pricing.json` from
+            [LiteLLM's canonical pricing JSON](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json).
+
+            ```
+            ${{ steps.diff.outputs.diff }}
+            ```
+
+            Merge if the numbers look reasonable. The cost figures on the
+            Reports tab will reflect the updated rates after the next deploy.
+          branch: chore/update-pricing
+          delete-branch: true
+          labels: automated, pricing
