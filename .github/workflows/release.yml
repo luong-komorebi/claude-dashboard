@@ -1,13 +1,24 @@
 name: Release Standalone Binaries
 
 # Triggers:
-#   - Tag push matching `v*` (e.g. `v0.2.0`) → publishes a real release
-#   - Manual workflow_dispatch                 → publishes a draft release
+#   - Tag push matching `v*` (manual tag creation)
+#   - workflow_dispatch                 → draft release for dry-runs
+#   - workflow_call                     → invoked by release-please.yml after
+#                                         it creates the real release (tags
+#                                         created with GITHUB_TOKEN don't
+#                                         fire `push` events by design, so
+#                                         we MUST be called, not triggered)
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      tag:
+        description: 'Tag to attach binaries to (set when called from release-please)'
+        required: false
+        type: string
 
 permissions:
   contents: write

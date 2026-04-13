@@ -25,7 +25,15 @@ The app walks you through the 3-click picker flow on first visit (including a co
 Three ways to run without internet:
 
 1. **PWA install** — visit the hosted URL once online, click the in-app Install button; service worker precaches everything. Works forever after that.
-2. **Standalone binary** — grab `claude-dashboard-<platform>` from the [Releases page](../../releases) and run it. Embeds the full web app in a ~1.5 MB single file. No runtime dependencies. Serves on `http://localhost:7878` and auto-opens your browser.
+2. **Standalone binary** — one-liner for macOS / Linux:
+
+   ```bash
+   curl -sSfL https://raw.githubusercontent.com/luong-komorebi/claude-dashboard/main/scripts/install.sh | bash
+   ```
+
+   Auto-detects your platform, downloads the latest release to `~/.local/bin/claude-dashboard`, and prints the command to run it. Pin a version with `VERSION=v0.2.0`. Change target dir with `INSTALL_DIR=/usr/local/bin`. Windows users: grab `claude-dashboard-windows-x64.exe` from the [Releases page](../../releases) manually.
+
+   Embeds the full web app in a ~1.5 MB single binary. No runtime deps. Serves on `http://localhost:7878` and auto-opens your browser.
 3. **Build from source** — see [DEVELOPMENT.md](./DEVELOPMENT.md).
 
 ## Privacy
