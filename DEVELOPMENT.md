@@ -99,7 +99,7 @@ Fully automated via [release-please](https://github.com/googleapis/release-pleas
 1. Commit to `main` with Conventional Commits (`feat:`, `fix:`, `perf:`, `docs:`, etc.)
 2. `Release Please` opens (or updates) a **Release PR** with a generated `CHANGELOG.md` and synchronized version bumps across `server/Cargo.toml`, `wasm/Cargo.toml`, and `web/package.json`
 3. Merge the Release PR — a `v0.x.y` tag is created automatically
-4. The tag triggers `Release Standalone Binaries`, which attaches 4 platform binaries to the release
+4. The Release Please workflow **calls** `Release Standalone Binaries` via `workflow_call`, which checks out the new tag, cross-compiles, and attaches 4 platform binaries to the release. (Direct tag-push trigger doesn't fire because GitHub suppresses workflows for events created with `GITHUB_TOKEN`.)
 
 No manual tagging, no manual changelog, no manual version bumps. Just merge the PR.
 

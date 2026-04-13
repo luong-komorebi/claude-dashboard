@@ -3,8 +3,14 @@ name: Release Please
 # Watches `main` for Conventional Commits (feat, fix, perf, refactor, docs, …).
 # When a release is warranted, opens a "Release PR" that bumps versions in
 # Cargo.toml / package.json and regenerates CHANGELOG.md. Merging that PR
-# creates the `v0.x.y` tag, which triggers `release.yml` and builds the
-# cross-platform binaries.
+# creates the `v0.x.y` tag and GitHub release — and immediately invokes
+# `release.yml` via workflow_call to build the cross-platform binaries.
+#
+# Why invoke instead of waiting for the tag-push trigger?
+#   GitHub suppresses workflow triggers for events created by GITHUB_TOKEN
+#   (to prevent infinite loops). Since release-please uses GITHUB_TOKEN to
+#   push the tag, `release.yml`'s `push: tags: [v*]` trigger would NEVER
+#   fire. Calling the reusable workflow directly bypasses that limitation.
 #
 # Docs: https://github.com/googleapis/release-please
 
@@ -20,6 +26,9 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
@@ -27,8 +36,6 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-      # Surface the result in the job summary so you can see at a glance
-      # whether a release was created.
       - name: Summarize result
         if: always()
         run: |
@@ -37,7 +44,7 @@ jobs:
             if [ "${{ steps.release.outputs.release_created }}" = "true" ]; then
               echo "✅ **Released \`${{ steps.release.outputs.tag_name }}\`**"
               echo ""
-              echo "Tag pushed — \`Release Standalone Binaries\` workflow should start shortly."
+              echo "Invoking \`Release Standalone Binaries\` to build cross-platform artifacts…"
             elif [ "${{ steps.release.outputs.pr }}" != "" ]; then
               echo "📝 Release PR updated: ${{ steps.release.outputs.pr }}"
               echo ""
@@ -46,3 +53,13 @@ jobs:
               echo "No release-worthy commits since the last tag."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+  build-binaries:
+    name: Build binaries
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+    permissions:
+      contents: write

@@ -46,6 +46,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          # When called from release-please we want the tag the Release PR
+          # created, not the merge commit on main (which is where the caller
+          # workflow is running from). Falls back to default ref when invoked
+          # via tag push or manual dispatch.
+          ref: ${{ inputs.tag || github.ref }}
 
       # ── Rust toolchain ────────────────────────────────────────────────────
       - name: Install Rust
