@@ -603,6 +603,592 @@ fn duration_minutes(start: &str, end: &str) -> u32 {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Forecasting — Holt-Winters (additive) + anomaly detection
+// ═══════════════════════════════════════════════════════════════════════════
+
+#[derive(Deserialize)]
+struct ForecastInput {
+    daily: Vec<f64>,
+    horizon: usize,
+    season_length: usize,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ForecastPoint {
+    pub value: f64,
+    pub lower: f64,
+    pub upper: f64,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct AnomalyMarker {
+    pub index: usize,
+    pub value: f64,
+    pub expected: f64,
+    pub z_score: f64,
+    pub kind: String, // "spike" | "drop"
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ForecastOutput {
+    pub forecast: Vec<ForecastPoint>,
+    pub fitted: Vec<f64>,
+    pub alpha: f64,
+    pub beta: f64,
+    pub gamma: f64,
+    pub rmse: f64,
+    pub anomalies: Vec<AnomalyMarker>,
+}
+
+/// Additive Holt-Winters triple exponential smoothing with weekly seasonality.
+/// Returns (fitted_values, forecast_values).
+fn holt_winters_additive(
+    series: &[f64],
+    alpha: f64,
+    beta: f64,
+    gamma: f64,
+    m: usize,
+    horizon: usize,
+) -> (Vec<f64>, Vec<f64>) {
+    let n = series.len();
+
+    // Not enough data for a full 2-season init — degrade gracefully
+    if n < 2 * m {
+        let fitted = series.to_vec();
+        let last = series.last().copied().unwrap_or(0.0);
+        return (fitted, vec![last; horizon]);
+    }
+
+    // Initial level = mean of first season
+    let mut level = series[..m].iter().sum::<f64>() / m as f64;
+
+    // Initial trend = slope between first-season avg and second-season avg
+    let second_avg = series[m..2 * m].iter().sum::<f64>() / m as f64;
+    let mut trend = (second_avg - level) / m as f64;
+
+    // Initial seasonality = actual minus level for each position in first season
+    let mut seasonal = vec![0.0; m];
+    for i in 0..m {
+        seasonal[i] = series[i] - level;
+    }
+
+    let mut fitted = Vec::with_capacity(n);
+
+    for (t, &x) in series.iter().enumerate() {
+        let s_idx = t % m;
+        let prev_level = level;
+        let prev_trend = trend;
+
+        // One-step-ahead fit uses previous values
+        fitted.push(prev_level + prev_trend + seasonal[s_idx]);
+
+        // Updates
+        level = alpha * (x - seasonal[s_idx]) + (1.0 - alpha) * (prev_level + prev_trend);
+        trend = beta * (level - prev_level) + (1.0 - beta) * prev_trend;
+        seasonal[s_idx] = gamma * (x - level) + (1.0 - gamma) * seasonal[s_idx];
+    }
+
+    // Multi-step forecast
+    let mut forecast = Vec::with_capacity(horizon);
+    for h in 1..=horizon {
+        let s_idx = (n + h - 1) % m;
+        forecast.push(level + h as f64 * trend + seasonal[s_idx]);
+    }
+
+    (fitted, forecast)
+}
+
+fn rmse(actual: &[f64], fitted: &[f64]) -> f64 {
+    if actual.is_empty() {
+        return 0.0;
+    }
+    let n = actual.len() as f64;
+    let sum: f64 = actual
+        .iter()
+        .zip(fitted)
+        .map(|(a, f)| (a - f).powi(2))
+        .sum();
+    (sum / n).sqrt()
+}
+
+/// Grid search over α, β, γ to minimize in-sample RMSE.
+fn grid_search_hw(
+    series: &[f64],
+    m: usize,
+    horizon: usize,
+) -> (f64, f64, f64, Vec<f64>, Vec<f64>, f64) {
+    let grid = [0.1, 0.3, 0.5, 0.7, 0.9];
+    let mut best = (0.5, 0.1, 0.3, f64::INFINITY);
+
+    for &a in &grid {
+        for &b in &grid {
+            for &g in &grid {
+                let (fitted, _) = holt_winters_additive(series, a, b, g, m, 0);
+                // Skip the first 2 seasons (init noise)
+                let skip = (2 * m).min(series.len());
+                let err = rmse(&series[skip..], &fitted[skip..]);
+                if err < best.3 {
+                    best = (a, b, g, err);
+                }
+            }
+        }
+    }
+
+    let (fitted, forecast) = holt_winters_additive(series, best.0, best.1, best.2, m, horizon);
+    (best.0, best.1, best.2, fitted, forecast, best.3)
+}
+
+#[wasm_bindgen]
+pub fn compute_forecast(input_json: &str) -> String {
+    match compute_forecast_inner(input_json) {
+        Ok(r) => serde_json::to_string(&r).unwrap_or_else(|e| format!("error:{e}")),
+        Err(e) => format!("error:{e}"),
+    }
+}
+
+fn compute_forecast_inner(input_json: &str) -> Result<ForecastOutput, String> {
+    let input: ForecastInput = serde_json::from_str(input_json).map_err(|e| e.to_string())?;
+    let m = input.season_length.max(1);
+    let horizon = input.horizon.max(1);
+
+    if input.daily.is_empty() {
+        return Ok(ForecastOutput {
+            forecast: vec![],
+            fitted: vec![],
+            alpha: 0.0,
+            beta: 0.0,
+            gamma: 0.0,
+            rmse: 0.0,
+            anomalies: vec![],
+        });
+    }
+
+    let (alpha, beta, gamma, fitted, forecast, err) =
+        grid_search_hw(&input.daily, m, horizon);
+
+    // 80% confidence interval = ± 1.28σ. Band widens with horizon.
+    let base_band = 1.28 * err;
+    let forecast_points: Vec<ForecastPoint> = forecast
+        .iter()
+        .enumerate()
+        .map(|(i, &v)| {
+            let widened = base_band * (1.0 + i as f64 * 0.08).sqrt();
+            ForecastPoint {
+                value: v.max(0.0),
+                lower: (v - widened).max(0.0),
+                upper: (v + widened).max(0.0),
+            }
+        })
+        .collect();
+
+    // Anomaly detection: residuals vs fitted; skip first 2 seasons
+    let mut anomalies = vec![];
+    let skip = (2 * m).min(input.daily.len());
+    if err > 1e-9 {
+        for i in skip..input.daily.len() {
+            let residual = input.daily[i] - fitted[i];
+            let z = residual / err;
+            if z.abs() > 2.5 {
+                anomalies.push(AnomalyMarker {
+                    index: i,
+                    value: input.daily[i],
+                    expected: (fitted[i] * 100.0).round() / 100.0,
+                    z_score: (z * 100.0).round() / 100.0,
+                    kind: if z > 0.0 { "spike" } else { "drop" }.to_string(),
+                });
+            }
+        }
+    }
+
+    Ok(ForecastOutput {
+        forecast: forecast_points,
+        fitted,
+        alpha,
+        beta,
+        gamma,
+        rmse: (err * 100.0).round() / 100.0,
+        anomalies,
+    })
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Insights — rule-based observations over usage events
+// ═══════════════════════════════════════════════════════════════════════════
+
+#[derive(Deserialize)]
+struct InsightsInput {
+    events: Vec<UsageEvent>,
+    pricing: HashMap<String, ModelPricing>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Insight {
+    pub title: String,
+    pub description: String,
+    pub severity: String, // "info" | "warning" | "alert"
+    pub category: String, // "cost" | "usage" | "efficiency" | "anomaly"
+    pub icon: String,     // single emoji or glyph
+}
+
+#[wasm_bindgen]
+pub fn compute_insights(input_json: &str) -> String {
+    match compute_insights_inner(input_json) {
+        Ok(r) => serde_json::to_string(&r).unwrap_or_else(|e| format!("error:{e}")),
+        Err(e) => format!("error:{e}"),
+    }
+}
+
+fn compute_insights_inner(input_json: &str) -> Result<Vec<Insight>, String> {
+    let input: InsightsInput =
+        serde_json::from_str(input_json).map_err(|e| e.to_string())?;
+    let mut insights = vec![];
+    if input.events.is_empty() {
+        return Ok(insights);
+    }
+
+    let mut events = input.events;
+    events.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+    let mut unpriced: HashSet<String> = HashSet::new();
+
+    // Aggregate by day + by session + by model
+    let mut daily: BTreeMap<String, f64> = BTreeMap::new();
+    let mut session_costs: HashMap<String, f64> = HashMap::new();
+    let mut model_cost: HashMap<String, f64> = HashMap::new();
+    let mut total_cost = 0.0_f64;
+    let mut total_tokens = 0_u64;
+
+    for ev in &events {
+        let cost = cost_of(ev, &input.pricing, &mut unpriced);
+        total_cost += cost;
+        total_tokens += ev.input_tokens
+            + ev.output_tokens
+            + ev.cache_creation_input_tokens
+            + ev.cache_read_input_tokens;
+
+        let date = ev.timestamp.get(..10).unwrap_or("unknown").to_string();
+        *daily.entry(date).or_default() += cost;
+        *session_costs.entry(ev.session_id.clone()).or_default() += cost;
+        *model_cost.entry(ev.model.clone()).or_default() += cost;
+    }
+
+    let daily_vec: Vec<(String, f64)> =
+        daily.iter().map(|(k, v)| (k.clone(), *v)).collect();
+    let n_days = daily_vec.len();
+
+    // ── Rule 1: Week-over-week cost change ───────────────────────────────
+    if n_days >= 14 {
+        let last_7: f64 = daily_vec[n_days - 7..].iter().map(|(_, c)| c).sum();
+        let prev_7: f64 = daily_vec[n_days - 14..n_days - 7]
+            .iter()
+            .map(|(_, c)| c)
+            .sum();
+        if prev_7 > 0.0 {
+            let pct = (last_7 - prev_7) / prev_7 * 100.0;
+            if pct.abs() >= 15.0 {
+                let direction = if pct > 0.0 { "up" } else { "down" };
+                insights.push(Insight {
+                    title: format!("Cost trending {} {:.0}% week-over-week", direction, pct.abs()),
+                    description: format!(
+                        "Last 7 days: ${:.2} · previous 7: ${:.2}",
+                        last_7, prev_7
+                    ),
+                    severity: if pct > 50.0 {
+                        "warning"
+                    } else {
+                        "info"
+                    }
+                    .to_string(),
+                    category: "cost".to_string(),
+                    icon: if pct > 0.0 { "📈" } else { "📉" }.to_string(),
+                });
+            }
+        }
+    }
+
+    // ── Rule 2: Top sessions dominate spend ─────────────────────────────
+    let mut sorted_sessions: Vec<(String, f64)> =
+        session_costs.into_iter().collect();
+    sorted_sessions.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    if sorted_sessions.len() >= 3 && total_cost > 0.01 {
+        let top_3_cost: f64 = sorted_sessions.iter().take(3).map(|(_, c)| c).sum();
+        let pct = top_3_cost / total_cost * 100.0;
+        if pct >= 30.0 {
+            let top = &sorted_sessions[0];
+            insights.push(Insight {
+                title: format!("3 sessions = {:.0}% of all spend", pct),
+                description: format!(
+                    "Biggest: {} at ${:.2}",
+                    top.0.chars().take(8).collect::<String>(),
+                    top.1
+                ),
+                severity: if pct >= 60.0 { "warning" } else { "info" }.to_string(),
+                category: "cost".to_string(),
+                icon: "🎯".to_string(),
+            });
+        }
+    }
+
+    // ── Rule 3: Runaway single session ──────────────────────────────────
+    if let Some((top_id, top_cost)) = sorted_sessions.first() {
+        if *top_cost > 5.0 && total_cost > 0.0 && *top_cost / total_cost > 0.35 {
+            insights.push(Insight {
+                title: "Runaway session detected".to_string(),
+                description: format!(
+                    "Session {} consumed ${:.2} ({:.0}% of total)",
+                    top_id.chars().take(8).collect::<String>(),
+                    top_cost,
+                    top_cost / total_cost * 100.0
+                ),
+                severity: "alert".to_string(),
+                category: "anomaly".to_string(),
+                icon: "⚠️".to_string(),
+            });
+        }
+    }
+
+    // ── Rule 4: Opus-heavy usage ─────────────────────────────────────────
+    if total_cost > 1.0 {
+        let opus_cost: f64 = model_cost
+            .iter()
+            .filter(|(k, _)| k.contains("opus"))
+            .map(|(_, v)| v)
+            .sum();
+        let opus_pct = opus_cost / total_cost * 100.0;
+        if opus_pct >= 50.0 {
+            insights.push(Insight {
+                title: format!("Opus is {:.0}% of your spend", opus_pct),
+                description:
+                    "Consider Sonnet or Haiku for tasks that don't need Opus's reasoning"
+                        .to_string(),
+                severity: "info".to_string(),
+                category: "efficiency".to_string(),
+                icon: "💡".to_string(),
+            });
+        }
+    }
+
+    // ── Rule 5: Cache hit rate ──────────────────────────────────────────
+    let total_input: u64 = events.iter().map(|e| e.input_tokens).sum();
+    let total_cache_read: u64 = events.iter().map(|e| e.cache_read_input_tokens).sum();
+    let total_cache_create: u64 = events.iter().map(|e| e.cache_creation_input_tokens).sum();
+    let total_cache = total_cache_read + total_cache_create;
+    if total_cache > 0 {
+        let hit_rate = total_cache_read as f64 / total_cache as f64 * 100.0;
+        if hit_rate < 30.0 && total_cache_create > 10_000 {
+            insights.push(Insight {
+                title: format!("Low cache hit rate: {:.0}%", hit_rate),
+                description: format!(
+                    "You wrote {} cache tokens but only read back {}",
+                    fmt_k(total_cache_create),
+                    fmt_k(total_cache_read)
+                ),
+                severity: "info".to_string(),
+                category: "efficiency".to_string(),
+                icon: "💾".to_string(),
+            });
+        } else if hit_rate >= 70.0 {
+            insights.push(Insight {
+                title: format!("Excellent cache hit rate: {:.0}%", hit_rate),
+                description: "You're getting great value from prompt caching".to_string(),
+                severity: "info".to_string(),
+                category: "efficiency".to_string(),
+                icon: "✨".to_string(),
+            });
+        }
+    }
+
+    // ── Rule 6: Month projection vs last month ──────────────────────────
+    if n_days >= 7 {
+        let month_by: BTreeMap<String, f64> = daily_vec
+            .iter()
+            .fold(BTreeMap::new(), |mut acc, (d, c)| {
+                let m = d.get(..7).unwrap_or("?").to_string();
+                *acc.entry(m).or_default() += c;
+                acc
+            });
+        let months: Vec<(&String, &f64)> = month_by.iter().collect();
+        if months.len() >= 2 {
+            let (this_m, this_c) = months[months.len() - 1];
+            let (prev_m, prev_c) = months[months.len() - 2];
+            let days_so_far = daily_vec
+                .iter()
+                .filter(|(d, _)| d.starts_with(this_m.as_str()))
+                .count() as f64;
+            if days_so_far > 0.0 && *prev_c > 0.01 {
+                let daily_rate = *this_c / days_so_far;
+                let projected = daily_rate * 30.0;
+                let pct = (projected - *prev_c) / *prev_c * 100.0;
+                if pct.abs() >= 10.0 {
+                    insights.push(Insight {
+                        title: format!(
+                            "Projected {} total: ${:.0}",
+                            this_m, projected
+                        ),
+                        description: format!(
+                            "{:+.0}% vs {} (${:.2})",
+                            pct, prev_m, prev_c
+                        ),
+                        severity: if pct > 50.0 {
+                            "warning"
+                        } else {
+                            "info"
+                        }
+                        .to_string(),
+                        category: "cost".to_string(),
+                        icon: "🔮".to_string(),
+                    });
+                }
+            }
+        }
+    }
+
+    // ── Rule 7: Tokens summary (always-on info)──────────────────────────
+    insights.push(Insight {
+        title: format!("{} total tokens across {} events", fmt_k(total_tokens), events.len()),
+        description: format!("${:.2} API-equivalent total spend", total_cost),
+        severity: "info".to_string(),
+        category: "usage".to_string(),
+        icon: "📊".to_string(),
+    });
+
+    // Sort: alerts first, warnings next, info last
+    insights.sort_by_key(|i| match i.severity.as_str() {
+        "alert" => 0,
+        "warning" => 1,
+        _ => 2,
+    });
+
+    Ok(insights)
+}
+
+fn fmt_k(n: u64) -> String {
+    if n >= 1_000_000 {
+        format!("{:.1}M", n as f64 / 1_000_000.0)
+    } else if n >= 1_000 {
+        format!("{:.1}k", n as f64 / 1_000.0)
+    } else {
+        n.to_string()
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// What-If simulator — recompute cost under model substitutions
+// ═══════════════════════════════════════════════════════════════════════════
+
+#[derive(Deserialize)]
+struct WhatIfInput {
+    events: Vec<UsageEvent>,
+    pricing: HashMap<String, ModelPricing>,
+    swaps: Vec<ModelSwap>,
+}
+
+#[derive(Deserialize, Clone)]
+struct ModelSwap {
+    from_contains: String,
+    to: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct WhatIfResult {
+    pub original_cost: f64,
+    pub simulated_cost: f64,
+    pub savings: f64,
+    pub savings_pct: f64,
+    pub affected_events: u32,
+    pub by_original_model: Vec<WhatIfModelBreakdown>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct WhatIfModelBreakdown {
+    pub model: String,
+    pub original: f64,
+    pub simulated: f64,
+    pub events: u32,
+}
+
+#[wasm_bindgen]
+pub fn compute_what_if(input_json: &str) -> String {
+    match compute_what_if_inner(input_json) {
+        Ok(r) => serde_json::to_string(&r).unwrap_or_else(|e| format!("error:{e}")),
+        Err(e) => format!("error:{e}"),
+    }
+}
+
+fn compute_what_if_inner(input_json: &str) -> Result<WhatIfResult, String> {
+    let input: WhatIfInput =
+        serde_json::from_str(input_json).map_err(|e| e.to_string())?;
+
+    let mut unpriced: HashSet<String> = HashSet::new();
+    let mut original_total = 0.0_f64;
+    let mut simulated_total = 0.0_f64;
+    let mut affected = 0_u32;
+
+    #[derive(Default)]
+    struct Agg {
+        original: f64,
+        simulated: f64,
+        events: u32,
+    }
+    let mut by_model: HashMap<String, Agg> = HashMap::new();
+
+    for ev in &input.events {
+        let original = cost_of(ev, &input.pricing, &mut unpriced);
+        original_total += original;
+
+        // Find matching swap rule (first match wins)
+        let swap = input
+            .swaps
+            .iter()
+            .find(|s| ev.model.to_lowercase().contains(&s.from_contains.to_lowercase()));
+
+        let simulated = if let Some(sw) = swap {
+            affected += 1;
+            let swapped = UsageEvent {
+                model: sw.to.clone(),
+                ..ev.clone()
+            };
+            cost_of(&swapped, &input.pricing, &mut unpriced)
+        } else {
+            original
+        };
+        simulated_total += simulated;
+
+        let entry = by_model.entry(ev.model.clone()).or_default();
+        entry.original += original;
+        entry.simulated += simulated;
+        entry.events += 1;
+    }
+
+    let savings = original_total - simulated_total;
+    let savings_pct = if original_total > 0.0 {
+        savings / original_total * 100.0
+    } else {
+        0.0
+    };
+
+    let mut breakdown: Vec<WhatIfModelBreakdown> = by_model
+        .into_iter()
+        .map(|(model, agg)| WhatIfModelBreakdown {
+            model,
+            original: agg.original,
+            simulated: agg.simulated,
+            events: agg.events,
+        })
+        .collect();
+    breakdown.sort_by(|a, b| b.original.partial_cmp(&a.original).unwrap_or(std::cmp::Ordering::Equal));
+
+    Ok(WhatIfResult {
+        original_cost: original_total,
+        simulated_cost: simulated_total,
+        savings,
+        savings_pct: (savings_pct * 100.0).round() / 100.0,
+        affected_events: affected,
+        by_original_model: breakdown,
+    })
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -771,5 +1357,149 @@ mod tests {
         assert_eq!(strip_date_suffix("claude-sonnet-4-5-20250929"), "claude-sonnet-4-5");
         assert_eq!(strip_date_suffix("claude-sonnet-4-6"), "claude-sonnet-4-6");
         assert_eq!(strip_date_suffix("claude-haiku-4-5"), "claude-haiku-4-5");
+    }
+
+    // ─── Forecast tests ───────────────────────────────────────────────────
+
+    #[test]
+    fn forecast_empty() {
+        let r: ForecastOutput = serde_json::from_str(&compute_forecast(
+            r#"{"daily":[],"horizon":7,"season_length":7}"#,
+        ))
+        .unwrap();
+        assert_eq!(r.forecast.len(), 0);
+        assert_eq!(r.fitted.len(), 0);
+    }
+
+    #[test]
+    fn forecast_short_series_degrades_gracefully() {
+        // Only 5 days, season is 7 — should return flat forecast of last value
+        let input = r#"{"daily":[10.0, 12.0, 15.0, 11.0, 13.0],"horizon":7,"season_length":7}"#;
+        let r: ForecastOutput = serde_json::from_str(&compute_forecast(input)).unwrap();
+        assert_eq!(r.forecast.len(), 7);
+        // Last value was 13.0 — forecast should be flat
+        for p in &r.forecast {
+            assert!((p.value - 13.0).abs() < 0.01, "got {}", p.value);
+        }
+    }
+
+    #[test]
+    fn forecast_captures_weekly_seasonality() {
+        // 4 weeks of "weekdays have 10, weekends have 2" pattern
+        let mut daily = vec![];
+        for _ in 0..4 {
+            daily.extend_from_slice(&[10.0, 10.0, 10.0, 10.0, 10.0, 2.0, 2.0]);
+        }
+        let input = format!(
+            r#"{{"daily":{},"horizon":7,"season_length":7}}"#,
+            serde_json::to_string(&daily).unwrap()
+        );
+        let r: ForecastOutput = serde_json::from_str(&compute_forecast(&input)).unwrap();
+        assert_eq!(r.forecast.len(), 7);
+        // The first 5 forecast points should be close to 10, last 2 close to 2
+        for (i, p) in r.forecast.iter().enumerate() {
+            let expected = if i < 5 { 10.0 } else { 2.0 };
+            assert!(
+                (p.value - expected).abs() < 1.5,
+                "day {i}: got {}, expected ~{}",
+                p.value,
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn forecast_detects_anomaly_spike() {
+        // 3 weeks of flat ~10, then one spike at day 22
+        let mut daily = vec![10.0; 21];
+        daily.push(50.0); // big spike
+        daily.push(10.0);
+        daily.push(10.0);
+        let input = format!(
+            r#"{{"daily":{},"horizon":3,"season_length":7}}"#,
+            serde_json::to_string(&daily).unwrap()
+        );
+        let r: ForecastOutput = serde_json::from_str(&compute_forecast(&input)).unwrap();
+        // Should detect at least one spike
+        assert!(
+            r.anomalies.iter().any(|a| a.kind == "spike"),
+            "expected a spike anomaly, got: {:?}",
+            r.anomalies.len()
+        );
+    }
+
+    // ─── Insights tests ───────────────────────────────────────────────────
+
+    #[test]
+    fn insights_empty() {
+        let r: Vec<Insight> = serde_json::from_str(&compute_insights(
+            r#"{"events":[],"pricing":{}}"#,
+        ))
+        .unwrap();
+        assert_eq!(r.len(), 0);
+    }
+
+    #[test]
+    fn insights_generates_total_summary() {
+        let input = r#"{
+            "events": [{"timestamp":"2026-04-10T10:00:00Z","session_id":"s1","project_id":"p","model":"claude-sonnet-4-6","input_tokens":100,"output_tokens":500,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}],
+            "pricing": {"claude-sonnet-4-6":{"input_cost_per_token":3e-6,"output_cost_per_token":1.5e-5,"cache_creation_input_token_cost":0,"cache_read_input_token_cost":0}}
+        }"#;
+        let r: Vec<Insight> = serde_json::from_str(&compute_insights(input)).unwrap();
+        // Should always include the total summary
+        assert!(r.iter().any(|i| i.category == "usage"));
+    }
+
+    #[test]
+    fn insights_detect_runaway_session() {
+        // One session eating most of the cost
+        let input = r#"{
+            "events": [
+                {"timestamp":"2026-04-10T10:00:00Z","session_id":"runaway","project_id":"p","model":"claude-opus-4-6","input_tokens":1000000,"output_tokens":500000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},
+                {"timestamp":"2026-04-10T11:00:00Z","session_id":"s2","project_id":"p","model":"claude-opus-4-6","input_tokens":100,"output_tokens":50,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}
+            ],
+            "pricing": {"claude-opus-4-6":{"input_cost_per_token":1.5e-5,"output_cost_per_token":7.5e-5,"cache_creation_input_token_cost":0,"cache_read_input_token_cost":0}}
+        }"#;
+        let r: Vec<Insight> = serde_json::from_str(&compute_insights(input)).unwrap();
+        assert!(r.iter().any(|i| i.category == "anomaly"));
+    }
+
+    // ─── What-If tests ────────────────────────────────────────────────────
+
+    #[test]
+    fn what_if_swap_sonnet_to_haiku() {
+        let input = r#"{
+            "events": [
+                {"timestamp":"2026-04-10T10:00:00Z","session_id":"s","project_id":"p","model":"claude-sonnet-4-6","input_tokens":1000,"output_tokens":2000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}
+            ],
+            "pricing": {
+                "claude-sonnet-4-6":{"input_cost_per_token":3e-6,"output_cost_per_token":1.5e-5,"cache_creation_input_token_cost":0,"cache_read_input_token_cost":0},
+                "claude-haiku-4-5":{"input_cost_per_token":1e-6,"output_cost_per_token":5e-6,"cache_creation_input_token_cost":0,"cache_read_input_token_cost":0}
+            },
+            "swaps": [{"from_contains":"sonnet","to":"claude-haiku-4-5"}]
+        }"#;
+        let r: WhatIfResult = serde_json::from_str(&compute_what_if(input)).unwrap();
+        // Original: 1000*3e-6 + 2000*1.5e-5 = 0.003 + 0.03 = 0.033
+        // Simulated: 1000*1e-6 + 2000*5e-6 = 0.001 + 0.01 = 0.011
+        // Savings: 0.022
+        assert!((r.original_cost - 0.033).abs() < 1e-9);
+        assert!((r.simulated_cost - 0.011).abs() < 1e-9);
+        assert!((r.savings - 0.022).abs() < 1e-9);
+        assert_eq!(r.affected_events, 1);
+    }
+
+    #[test]
+    fn what_if_no_matching_swap() {
+        let input = r#"{
+            "events": [
+                {"timestamp":"2026-04-10T10:00:00Z","session_id":"s","project_id":"p","model":"claude-opus-4-6","input_tokens":100,"output_tokens":200,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}
+            ],
+            "pricing": {"claude-opus-4-6":{"input_cost_per_token":1.5e-5,"output_cost_per_token":7.5e-5,"cache_creation_input_token_cost":0,"cache_read_input_token_cost":0}},
+            "swaps": [{"from_contains":"sonnet","to":"claude-haiku-4-5"}]
+        }"#;
+        let r: WhatIfResult = serde_json::from_str(&compute_what_if(input)).unwrap();
+        assert_eq!(r.affected_events, 0);
+        assert_eq!(r.savings, 0.0);
+        assert_eq!(r.original_cost, r.simulated_cost);
     }
 }

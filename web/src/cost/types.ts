@@ -59,3 +59,65 @@ export interface ModelPricing {
 }
 
 export type PricingTable = Record<string, ModelPricing>
+
+// ─── Forecast ────────────────────────────────────────────────────────────────
+
+export interface ForecastPoint {
+  value: number
+  lower: number
+  upper: number
+}
+
+export interface AnomalyMarker {
+  index: number
+  value: number
+  expected: number
+  z_score: number
+  kind: 'spike' | 'drop'
+}
+
+export interface ForecastOutput {
+  forecast: ForecastPoint[]
+  fitted: number[]
+  alpha: number
+  beta: number
+  gamma: number
+  rmse: number
+  anomalies: AnomalyMarker[]
+}
+
+// ─── Insights ────────────────────────────────────────────────────────────────
+
+export type InsightSeverity = 'info' | 'warning' | 'alert'
+export type InsightCategory = 'cost' | 'usage' | 'efficiency' | 'anomaly'
+
+export interface Insight {
+  title: string
+  description: string
+  severity: InsightSeverity
+  category: InsightCategory
+  icon: string
+}
+
+// ─── What-If ─────────────────────────────────────────────────────────────────
+
+export interface ModelSwap {
+  from_contains: string
+  to: string
+}
+
+export interface WhatIfModelBreakdown {
+  model: string
+  original: number
+  simulated: number
+  events: number
+}
+
+export interface WhatIfResult {
+  original_cost: number
+  simulated_cost: number
+  savings: number
+  savings_pct: number
+  affected_events: number
+  by_original_model: WhatIfModelBreakdown[]
+}

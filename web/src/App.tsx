@@ -13,13 +13,14 @@ import { Todos } from './pages/Todos'
 import { Sessions } from './pages/Sessions'
 import { Settings } from './pages/Settings'
 import { ReportsPage } from './pages/Reports'
+import { Insights } from './pages/Insights'
 import { PrivacyBadge } from './components/PrivacyBadge'
 import { ThemeSwitcher } from './components/ThemeSwitcher'
 import { c } from './theme/colors'
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
 
-const TABS = ['Overview', 'Reports', 'Usage', 'Sessions', 'Projects', 'Plugins', 'Todos', 'Settings'] as const
+const TABS = ['Overview', 'Insights', 'Reports', 'Usage', 'Sessions', 'Projects', 'Plugins', 'Todos', 'Settings'] as const
 type Tab = typeof TABS[number]
 
 // ─── State machine ───────────────────────────────────────────────────────────
@@ -432,6 +433,7 @@ export default function App() {
       {/* Main content — view-transition-name is set via .tab-content class */}
       <div className="tab-content" style={{ flex: 1, padding: 24, overflow: 'auto' }}>
         {tab === 'Overview'  && <Overview  stats={data.stats} events={data.usage_events} onDrillDown={changeTab} />}
+        {tab === 'Insights'  && <Insights  stats={data.stats} events={data.usage_events} />}
         {tab === 'Reports'   && <ReportsPage events={data.usage_events} />}
         {tab === 'Usage'     && <Usage     data={data.usage} />}
         {tab === 'Sessions'  && <Sessions  data={data.sessions} />}
