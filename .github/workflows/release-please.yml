@@ -38,15 +38,30 @@ jobs:
 
       - name: Summarize result
         if: always()
+        # IMPORTANT: release-please's `pr` output is a JSON object containing
+        # unescaped quotes, parentheses, and newlines (the PR body). Never
+        # interpolate ${{ ... }} directly into bash — the shell parser will
+        # choke on the first `"` in the title or body. Pass through env so
+        # bash only sees $VAR, not the raw content.
+        env:
+          RELEASE_CREATED: ${{ steps.release.outputs.release_created }}
+          TAG_NAME: ${{ steps.release.outputs.tag_name }}
+          PR_JSON: ${{ steps.release.outputs.pr }}
         run: |
           {
             echo "# Release Please"
-            if [ "${{ steps.release.outputs.release_created }}" = "true" ]; then
-              echo "✅ **Released \`${{ steps.release.outputs.tag_name }}\`**"
+            if [ "${RELEASE_CREATED}" = "true" ]; then
+              echo "✅ **Released \`${TAG_NAME}\`**"
               echo ""
               echo "Invoking \`Release Standalone Binaries\` to build cross-platform artifacts…"
-            elif [ "${{ steps.release.outputs.pr }}" != "" ]; then
-              echo "📝 Release PR updated: ${{ steps.release.outputs.pr }}"
+            elif [ -n "${PR_JSON}" ]; then
+              # Extract just the PR number instead of dumping the whole JSON blob
+              PR_NUMBER="$(printf '%s' "${PR_JSON}" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("number", ""))' 2>/dev/null || true)"
+              if [ -n "${PR_NUMBER}" ]; then
+                echo "📝 Release PR updated: #${PR_NUMBER}"
+              else
+                echo "📝 Release PR updated."
+              fi
               echo ""
               echo "Merge the PR to cut the next release."
             else
