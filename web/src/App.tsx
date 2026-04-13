@@ -18,6 +18,7 @@ import { ReportsPage } from './pages/Reports'
 import { Insights } from './pages/Insights'
 import { PrivacyBadge } from './components/PrivacyBadge'
 import { ThemeSwitcher } from './components/ThemeSwitcher'
+import { SupportButton } from './components/SupportButton'
 import { c } from './theme/colors'
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
@@ -509,6 +510,8 @@ export default function App() {
         {tab === 'Todos'     && <Todos     data={data.todos} />}
         {tab === 'Settings'  && <Settings  data={data.settings} />}
       </div>
+
+      <SupportButton />
     </div>
   )
 }

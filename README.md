@@ -1,5 +1,7 @@
 # Claude Dashboard
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/H2H71LA8V)
+
 A fully client-side dashboard for `~/.claude`. React + Rust/WASM + PWA. Runs in the browser, reads your local Claude Code data directly via the File System Access API, and never sends a byte over the network.
 
 - **Overview** — hero metrics, cost trends, model breakdown, recent sessions
@@ -88,3 +90,11 @@ Nothing this app does involves a network request beyond fetching its own bundled
 - Check page source — there's a `Content-Security-Policy` meta tag with `connect-src 'self'` that makes the browser physically refuse any outbound connection
 - The in-sidebar **privacy badge** shows a live count of external requests (always 0)
 - The [source code](./web/src) is ~3k lines you can audit yourself
+
+## Support
+
+If this saves you time or teaches you something, a small tip keeps the project going:
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/H2H71LA8V)
+
+The in-app "Support me" button is a plain `<a>` link — no third-party scripts load, no tracking pixels, and the CSP still shows zero external requests. Clicking opens Ko-fi in a new tab with `rel="noreferrer"` so they don't even see what site referred you.

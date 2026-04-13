@@ -1,6 +1,7 @@
 {
   "name": "claude-dashboard",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "dev": "pnpm --filter web dev",
     "build": "pnpm --filter web build",

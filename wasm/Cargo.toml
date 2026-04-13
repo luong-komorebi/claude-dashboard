@@ -2,6 +2,8 @@
 name = "claude-analytics"
 version = "0.1.0"
 edition = "2021"
+description = "WASM analytics for Claude Dashboard — forecasting, anomaly detection, reports"
+license = "MIT"
 
 [lib]
 crate-type = ["cdylib"]

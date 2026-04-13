@@ -1,0 +1,97 @@
+# Dependabot config — covers every dependency ecosystem in this repo.
+#
+# Groups minor/patch bumps together so we don't get a PR per package. Major
+# bumps still come in their own PRs so they can be evaluated individually.
+
+version: 2
+updates:
+  # ─── web app (pnpm / npm) ─────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ecosystem:web"
+    commit-message:
+      prefix: "chore(web)"
+      include: "scope"
+    groups:
+      web-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ─── WASM analytics crate ─────────────────────────────────────────────────
+  - package-ecosystem: "cargo"
+    directory: "/wasm"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ecosystem:rust"
+    commit-message:
+      prefix: "chore(wasm)"
+      include: "scope"
+    groups:
+      wasm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ─── Standalone server binary ─────────────────────────────────────────────
+  - package-ecosystem: "cargo"
+    directory: "/server"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ecosystem:rust"
+    commit-message:
+      prefix: "chore(server)"
+      include: "scope"
+    groups:
+      server-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ─── GitHub Actions workflow pins ─────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "ecosystem:actions"
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      actions-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
