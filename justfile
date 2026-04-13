@@ -55,3 +55,17 @@ pricing-update:
     curl -sL https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json -o /tmp/litellm_prices.json
     python3 scripts/filter_pricing.py /tmp/litellm_prices.json web/src/cost/pricing.json
     @echo "pricing.json updated — commit the change"
+
+# ─── Standalone binary (offline distribution) ────────────────────────────────
+
+# Build the single-file standalone server binary. Compiles the web app first
+# so rust-embed can snapshot the built dist into the binary.
+server-build: build
+    cargo build --release --manifest-path server/Cargo.toml
+    @echo ""
+    @echo "  Binary:  target/release/claude-dashboard"
+    @ls -lh target/release/claude-dashboard
+
+# Run the standalone server locally (rebuilds the web bundle first)
+server-run: server-build
+    target/release/claude-dashboard

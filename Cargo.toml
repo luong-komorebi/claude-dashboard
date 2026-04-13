@@ -1,3 +1,11 @@
 [workspace]
-members = ["wasm"]
+members = ["wasm", "server"]
 resolver = "2"
+
+# Binary-size optimisations are applied per-package so they don't leak into
+# the wasm crate (where `panic = "abort"` + LTO confuses the old wasm-opt
+# that ships with wasm-pack).
+[profile.release.package.claude-dashboard-server]
+opt-level = "z"
+codegen-units = 1
+strip = true

@@ -4,6 +4,7 @@ import type { WorkerResponse } from './worker/parser.worker'
 import { pickClaudeDir, getStoredDir, clearHandle, ensurePermission } from './fs-access'
 import { saveToOpfs, loadFromOpfs, clearOpfsCache, cleanupLegacyCache } from './opfs'
 import { isStoragePersisted, requestPersistence } from './persistence'
+import { useInstallPrompt, useOnlineStatus, useIsStandalone } from './pwa'
 import { createSyncChannel, broadcast, withParseLock, type SyncMessage } from './sync'
 import { exportDashboard } from './export'
 import { Overview } from './pages/Overview'
@@ -71,6 +72,10 @@ export default function App() {
   const [exportStatus, setExportStatus] = useState<string | null>(null)
   const tabIndexRef = useRef(TABS.indexOf('Overview'))
   const channelRef = useRef<BroadcastChannel | null>(null)
+
+  const { canInstall, install } = useInstallPrompt()
+  const online = useOnlineStatus()
+  const isStandalone = useIsStandalone()
 
   // ── Startup: cleanup legacy cache, try persistent storage, open sync channel, load data
   useEffect(() => {
@@ -291,6 +296,32 @@ export default function App() {
             <PrivacyBadge variant="full" />
           </div>
 
+          {canInstall && !isStandalone && (
+            <div style={{
+              marginTop: 12,
+              display: 'flex', alignItems: 'center', gap: 10,
+              background: c.surface, border: `1px solid ${c.border}`,
+              borderLeft: `3px solid ${c.accent}`,
+              borderRadius: 4, padding: '10px 14px',
+              fontSize: 12, color: c.textMuted, textAlign: 'left',
+            }}>
+              <span style={{ flex: 1, lineHeight: 1.5 }}>
+                <strong style={{ color: c.text }}>Install for offline use:</strong>{' '}
+                adds the dashboard to your dock/launcher and makes it work without internet forever.
+              </span>
+              <button
+                onClick={install}
+                style={{
+                  background: c.accent, color: c.accentFg, border: 'none',
+                  borderRadius: 3, padding: '6px 12px', fontSize: 11,
+                  fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+                }}
+              >
+                Install
+              </button>
+            </div>
+          )}
+
           <div style={{ marginTop: 20, textAlign: 'left', background: c.surface, border: `1px solid ${c.borderSoft}`, borderRadius: 8, padding: 20 }}>
             <div style={{ color: c.textDim, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 14 }}>How to navigate to the folder</div>
             {[
@@ -393,6 +424,33 @@ export default function App() {
         ))}
 
         <div style={{ position: 'absolute', bottom: 16, left: 0, right: 0, padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {canInstall && !isStandalone && (
+            <button
+              onClick={install}
+              style={{
+                background: c.accent, color: c.accentFg, border: 'none',
+                borderRadius: 4, padding: '6px 12px', cursor: 'pointer',
+                fontSize: 11, fontWeight: 600, width: '100%',
+              }}
+              title="Install as standalone app for offline use"
+            >
+              ↓ Install app
+            </button>
+          )}
+          {!online && (
+            <div
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                background: c.surfaceHover, border: `1px solid ${c.warning}`,
+                borderRadius: 4, padding: '5px 8px',
+                fontSize: 10, color: c.warning, lineHeight: 1.3,
+              }}
+              title="Your device is offline, but this dashboard works fully offline — nothing is lost."
+            >
+              <span>●</span>
+              <span>Offline · all features work</span>
+            </div>
+          )}
           <PrivacyBadge />
           {needsPermission && (
             <div style={{

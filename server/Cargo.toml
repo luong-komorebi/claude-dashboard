@@ -1,0 +1,16 @@
+[package]
+name = "claude-dashboard-server"
+version = "0.1.0"
+edition = "2021"
+description = "Standalone offline server for Claude Dashboard"
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "claude-dashboard"
+path = "src/main.rs"
+
+[dependencies]
+tiny_http = "0.12"
+rust-embed = { version = "8", features = ["compression"] }
+mime_guess = "2"
+open = "5"
