@@ -22,7 +22,7 @@ There are two ways to get the dashboard onto a machine that has no internet:
 
 ### Option 1 — Install as a PWA from the hosted URL
 
-1. Visit the hosted dashboard (`https://<user>.github.io/claude-dashboard/`) once while online
+1. Visit [**luong-komorebi.github.io/claude-dashboard**](https://luong-komorebi.github.io/claude-dashboard/) once while online
 2. Click **Install** in the in-app hint (or the browser's address-bar install icon)
 3. After that, the dashboard works offline forever — the service worker precaches every asset
 4. Optional: enable **persistent storage** via the shield icon in the sidebar to prevent the browser from evicting the cache under disk pressure
@@ -52,6 +52,8 @@ The binary:
 - Is ~1.5 MB, has zero runtime dependencies, runs 100% offline
 
 Why `http://localhost` instead of `file://`? The File System Access API requires a secure context — `localhost` qualifies everywhere, `file://` has spotty support.
+
+> **Cutting a new release:** push a `v*` tag (`git tag v0.2.0 && git push --tags`) and the `Release Standalone Binaries` workflow builds all 4 platforms in parallel and publishes them. Run the workflow manually (`Actions` → *Release Standalone Binaries* → *Run workflow*) to produce a draft release you can inspect before publishing.
 
 ## Development
 

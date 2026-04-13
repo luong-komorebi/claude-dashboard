@@ -1,14 +1,13 @@
 name: Release Standalone Binaries
 
+# Triggers:
+#   - Tag push matching `v*` (e.g. `v0.2.0`) → publishes a real release
+#   - Manual workflow_dispatch                 → publishes a draft release
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Tag to attach the binaries to (leave empty for draft)'
-        required: false
 
 permissions:
   contents: write
