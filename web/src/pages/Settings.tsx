@@ -1,9 +1,20 @@
+import { useMemo, useState } from 'react'
 import type { SettingsData } from '../api'
 import { StatCard } from '../components/StatCard'
 import { SectionHeader } from '../components/SectionHeader'
+import { SearchInput, matchesQuery } from '../components/SearchInput'
 import { c } from '../theme/colors'
 
 export function Settings({ data }: { data: SettingsData }) {
+  const [query, setQuery] = useState('')
+
+  const filteredHistory = useMemo(() => {
+    if (!query) return data.recent_history
+    return data.recent_history.filter(
+      entry => matchesQuery(entry.display, query) || matchesQuery(entry.project, query)
+    )
+  }, [data.recent_history, query])
+
   return (
     <div>
       <SectionHeader title="Settings" sub="Permissions, plugins, and recent command history" />
@@ -50,20 +61,32 @@ export function Settings({ data }: { data: SettingsData }) {
 
       <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 6, overflow: 'hidden' }}>
         <div style={{ padding: '10px 16px', background: c.surfaceAlt, color: c.accent, fontSize: 13, fontWeight: 600 }}>Recent History</div>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <tbody>
-            {data.recent_history.map((entry, i) => (
-              <tr key={i} style={{ borderTop: `1px solid ${c.surfaceHover}` }}>
-                <td style={{ padding: '7px 16px', color: c.text, fontFamily: 'monospace', maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {entry.display}
-                </td>
-                <td style={{ padding: '7px 16px', color: c.textGhost, fontSize: 12 }}>
-                  {entry.project?.split('/').pop()}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div style={{ padding: '12px 16px 0' }}>
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder="Search command history…"
+            count={query ? filteredHistory.length : undefined}
+          />
+        </div>
+        {query && filteredHistory.length === 0 ? (
+          <div style={{ color: c.textGhost, fontSize: 12, padding: '16px 8px' }}>No results for "{query}"</div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <tbody>
+              {filteredHistory.map((entry, i) => (
+                <tr key={i} style={{ borderTop: `1px solid ${c.surfaceHover}` }}>
+                  <td style={{ padding: '7px 16px', color: c.text, fontFamily: 'monospace', maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {entry.display}
+                  </td>
+                  <td style={{ padding: '7px 16px', color: c.textGhost, fontSize: 12 }}>
+                    {entry.project?.split('/').pop()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   )

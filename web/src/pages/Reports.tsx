@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { UsageEvent } from '../api'
 import { SectionHeader } from '../components/SectionHeader'
 import { StatCard } from '../components/StatCard'
+import { SearchInput, matchesQuery } from '../components/SearchInput'
 import { c } from '../theme/colors'
 import pricingJson from '../cost/pricing.json'
 import type { Reports, PeriodRow, SessionRow, BlockRow, PricingTable } from '../cost/types'
@@ -36,6 +37,7 @@ const fmtTokens = (n: number) => {
 
 export function ReportsPage({ events }: { events: UsageEvent[] }) {
   const [sub, setSub] = useState<SubTab>('Daily')
+  const [query, setQuery] = useState('')
   const [reports, setReports] = useState<Reports | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -80,6 +82,43 @@ export function ReportsPage({ events }: { events: UsageEvent[] }) {
 
   const t = reports.grand_total
   const hasData = t.event_count > 0
+
+  const filterPeriod = (rows: PeriodRow[]): PeriodRow[] => {
+    if (!query) return rows
+    return rows.filter(
+      r => matchesQuery(r.label, query) || matchesQuery(r.models.join(' '), query)
+    )
+  }
+  const filterSessions = (rows: SessionRow[]): SessionRow[] => {
+    if (!query) return rows
+    return rows.filter(
+      r =>
+        matchesQuery(r.session_id, query) ||
+        matchesQuery(r.project_id, query) ||
+        matchesQuery(r.models.join(' '), query)
+    )
+  }
+  const filterBlocks = (rows: BlockRow[]): BlockRow[] => {
+    if (!query) return rows
+    return rows.filter(
+      r => matchesQuery(r.start, query) || matchesQuery(r.models.join(' '), query)
+    )
+  }
+
+  const dailyFiltered = filterPeriod(reports.daily)
+  const weeklyFiltered = filterPeriod(reports.weekly)
+  const monthlyFiltered = filterPeriod(reports.monthly)
+  const sessionsFiltered = filterSessions(reports.sessions)
+  const blocksFiltered = filterBlocks(reports.blocks)
+
+  const currentCount =
+    sub === 'Daily' ? dailyFiltered.length :
+    sub === 'Weekly' ? weeklyFiltered.length :
+    sub === 'Monthly' ? monthlyFiltered.length :
+    sub === 'Sessions' ? sessionsFiltered.length :
+    blocksFiltered.length
+
+  const currentEmpty = query !== '' && currentCount === 0
 
   return (
     <div>
@@ -135,17 +174,32 @@ export function ReportsPage({ events }: { events: UsageEvent[] }) {
         ))}
       </div>
 
+      {hasData && (
+        <SearchInput
+          value={query}
+          onChange={setQuery}
+          placeholder="Filter current report…"
+          count={query ? currentCount : undefined}
+        />
+      )}
+
       {!hasData && (
         <div style={{ color: c.textGhost, fontSize: 13 }}>
           No usage events found in <code>~/.claude/projects/</code>. Session logs appear after Claude Code processes assistant messages.
         </div>
       )}
 
-      {hasData && sub === 'Daily'    && <PeriodTable rows={reports.daily}    labelCol="Date" />}
-      {hasData && sub === 'Weekly'   && <PeriodTable rows={reports.weekly}   labelCol="Week start" />}
-      {hasData && sub === 'Monthly'  && <PeriodTable rows={reports.monthly}  labelCol="Month" />}
-      {hasData && sub === 'Sessions' && <SessionsTable rows={reports.sessions} />}
-      {hasData && sub === 'Blocks'   && <BlocksTable rows={reports.blocks} />}
+      {hasData && currentEmpty ? (
+        <div style={{ color: c.textGhost, fontSize: 12, padding: '16px 8px' }}>No results for "{query}"</div>
+      ) : (
+        <>
+          {hasData && sub === 'Daily'    && <PeriodTable rows={dailyFiltered}    labelCol="Date" />}
+          {hasData && sub === 'Weekly'   && <PeriodTable rows={weeklyFiltered}   labelCol="Week start" />}
+          {hasData && sub === 'Monthly'  && <PeriodTable rows={monthlyFiltered}  labelCol="Month" />}
+          {hasData && sub === 'Sessions' && <SessionsTable rows={sessionsFiltered} />}
+          {hasData && sub === 'Blocks'   && <BlocksTable rows={blocksFiltered} />}
+        </>
+      )}
     </div>
   )
 }

@@ -1,6 +1,8 @@
+import { useMemo, useState } from 'react'
 import type { UsageData } from '../api'
 import { StatCard } from '../components/StatCard'
 import { SectionHeader } from '../components/SectionHeader'
+import { SearchInput, matchesQuery } from '../components/SearchInput'
 import { c } from '../theme/colors'
 
 function outcomeColor(outcome?: string): string {
@@ -11,6 +13,19 @@ function outcomeColor(outcome?: string): string {
 }
 
 export function Usage({ data }: { data: UsageData }) {
+  const [query, setQuery] = useState('')
+
+  const filteredFacets = useMemo(() => {
+    if (!query) return data.facets
+    return data.facets.filter(f =>
+      matchesQuery(f.brief_summary, query) ||
+      matchesQuery(f.underlying_goal, query) ||
+      matchesQuery(f.session_type, query) ||
+      matchesQuery(f.outcome, query) ||
+      matchesQuery(f.claude_helpfulness, query)
+    )
+  }, [data.facets, query])
+
   const achieved = (data.outcome_counts['mostly_achieved'] ?? 0) + (data.outcome_counts['fully_achieved'] ?? 0)
   const veryHelpful = data.helpfulness_counts['very_helpful'] ?? 0
   const pct = (n: number) => data.total_sessions > 0 ? `${Math.round(n / data.total_sessions * 100)}%` : '0%'
@@ -62,6 +77,16 @@ export function Usage({ data }: { data: UsageData }) {
         </div>
       </div>
 
+      <SearchInput
+        value={query}
+        onChange={setQuery}
+        placeholder="Search usage facets…"
+        count={query ? filteredFacets.length : undefined}
+      />
+
+      {query && filteredFacets.length === 0 ? (
+        <div style={{ color: c.textGhost, fontSize: 12, padding: '16px 8px' }}>No results for "{query}"</div>
+      ) : (
       <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 6, overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
@@ -73,7 +98,7 @@ export function Usage({ data }: { data: UsageData }) {
             </tr>
           </thead>
           <tbody>
-            {data.facets.map(f => (
+            {filteredFacets.map(f => (
               <tr key={f.session_id} style={{ borderTop: `1px solid ${c.surfaceHover}` }}>
                 <td style={{ padding: '8px 16px', color: c.text, maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {f.brief_summary ?? f.underlying_goal ?? '—'}
@@ -86,6 +111,7 @@ export function Usage({ data }: { data: UsageData }) {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   )
 }
