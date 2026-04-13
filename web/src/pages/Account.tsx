@@ -318,11 +318,13 @@ function truncate(uuid: string): string {
 function computeCostByPath(
   events: UsageEvent[],
   pricing: PricingTable,
-  projectPaths: Record<string, string>,
+  projectPaths: Record<string, string> | undefined,
 ): Map<string, number> {
+  // Defensive: old OPFS snapshots might deserialize with projectPaths = undefined
+  const paths = projectPaths ?? {}
   const byPath = new Map<string, number>()
   for (const ev of events) {
-    const path = projectPaths[ev.project_id] ?? ev.project_id
+    const path = paths[ev.project_id] ?? ev.project_id
     const p = pricing[ev.model] ?? pricing[stripDateSuffix(ev.model)] ?? {}
     const cost =
       ev.input_tokens * (p.input_cost_per_token ?? 0) +

@@ -540,9 +540,10 @@ function AccountCard({
   }
 
   // ── Loaded state: compact stats + top 3 cost reconciliation
+  const paths = projectPaths ?? {}
   const computedByPath = new Map<string, number>()
   for (const ev of events) {
-    const path = projectPaths[ev.project_id] ?? ev.project_id
+    const path = paths[ev.project_id] ?? ev.project_id
     const p = pricingJson[ev.model as keyof typeof pricingJson] as
       | Record<string, number> | undefined
     if (!p) continue
@@ -1180,8 +1181,13 @@ function buildModelBreakdown(events: UsageEvent[], pricing: PricingTable) {
 function buildProjectBreakdown(
   events: UsageEvent[],
   pricing: PricingTable,
-  projectPaths: Record<string, string>,
+  projectPaths: Record<string, string> | undefined,
 ) {
+  // Defensive: old OPFS snapshots may deserialize with projectPaths = undefined.
+  // The migration in opfs.ts fills this in, but guard here too so a rogue
+  // cache version can't crash Array.map.
+  const paths = projectPaths ?? {}
+
   const agg = new Map<string, { cost: number; events: number }>()
   for (const ev of events) {
     const cur = agg.get(ev.project_id) ?? { cost: 0, events: 0 }
@@ -1192,7 +1198,7 @@ function buildProjectBreakdown(
   const maxCost = [...agg.values()].reduce((m, v) => Math.max(m, v.cost), 0)
   return [...agg.entries()]
     .map(([id, v]) => {
-      const fullPath = projectPaths[id] ?? decodeProjectIdFallback(id)
+      const fullPath = paths[id] ?? decodeProjectIdFallback(id)
       return {
         label: shortenPath(fullPath),
         fullPath,
