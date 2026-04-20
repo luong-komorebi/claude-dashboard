@@ -85,6 +85,18 @@
     "input_cost_per_token": 5e-06,
     "output_cost_per_token": 2.5e-05
   },
+  "claude-opus-4-7": {
+    "cache_creation_input_token_cost": 6.25e-06,
+    "cache_read_input_token_cost": 5e-07,
+    "input_cost_per_token": 5e-06,
+    "output_cost_per_token": 2.5e-05
+  },
+  "claude-opus-4-7-20260416": {
+    "cache_creation_input_token_cost": 6.25e-06,
+    "cache_read_input_token_cost": 5e-07,
+    "input_cost_per_token": 5e-06,
+    "output_cost_per_token": 2.5e-05
+  },
   "claude-sonnet-4-20250514": {
     "cache_creation_input_token_cost": 3.75e-06,
     "cache_read_input_token_cost": 3e-07,
